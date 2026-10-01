@@ -1,0 +1,40 @@
+<!--
+  Synology DSM 7.x syslog decoders (BSD / RFC 3164 format)
+  https://github.com/FarmhouseNetworking/Wazuh-Synology
+
+  Connection lines are pre-decoded by Wazuh with program_name Connection.
+  Wazuh only tries decoders that declare program_name against such events,
+  so synology-conn must declare it.
+
+  FileStation Event lines contain a space before the colon, so Wazuh sets
+  no program_name and only tries decoders without one. synology-file must
+  not declare program_name.
+-->
+<decoder name="synology-conn">
+  <program_name>^Connection$</program_name>
+  <prematch type="pcre2">User \[[^\]]+\] from \[[^\]]+\]|Host \[[^\]]+\] was blocked</prematch>
+</decoder>
+<decoder name="synology-conn-fields">
+  <parent>synology-conn</parent>
+  <regex type="pcre2">User \[([^\]]+)\] from \[([^\]]+)\]</regex>
+  <order>dstuser, srcip</order>
+</decoder>
+<decoder name="synology-conn-fields">
+  <parent>synology-conn</parent>
+  <regex type="pcre2">Host \[([^\]]+)\] was blocked</regex>
+  <order>srcip</order>
+</decoder>
+<decoder name="synology-conn-fields">
+  <parent>synology-conn</parent>
+  <regex type="pcre2">(?:via|to) \[([^\]]+)\]</regex>
+  <order>service</order>
+</decoder>
+
+<decoder name="synology-file">
+  <prematch type="pcre2">Path: .+, File/Folder: </prematch>
+</decoder>
+<decoder name="synology-file-fields">
+  <parent>synology-file</parent>
+  <regex type="pcre2">(\w+), Path: (.+?), File/Folder: (\w+), Size: (.+?), User: (.+?), IP: (\S+)</regex>
+  <order>syno_action, file_path, file_type, file_size, dstuser, srcip</order>
+</decoder>

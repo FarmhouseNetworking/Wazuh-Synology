@@ -1,0 +1,9 @@
+# Real DSM 7 syslog lines (BSD / RFC 3164), with names and addresses replaced.
+# Format: <expected rule ID with the default RULE_BASE>|<log line>
+# Paste a line (without the "ID|" prefix) into /var/ossec/bin/wazuh-logtest to check it by hand.
+127502|Oct  1 16:22:41 NAS01 Connection: User [jdoe] from [203.0.113.25] failed to sign in to [DSM] via [password] due to authorization failure.
+127500|Oct  1 16:36:49 NAS01 Connection: User [jdoe] from [203.0.113.25] has successfully passed the first authentication of 2FA via [password]
+127501|Oct  1 16:36:55 NAS01 Connection: User [jdoe] from [203.0.113.25] signed in to [DSM] successfully via [password].
+127510|Oct  1 16:37:11 NAS01 FileStation Event: upload, Path: /Shared/Quarterly report.docx, File/Folder: File, Size: 18.77 KB, User: jdoe, IP: 203.0.113.25
+127510|Oct  1 16:37:18 NAS01 FileStation Event: rename, Path: /Shared/Quarterly report.docx -> /Shared/Q3 report.docx, File/Folder: File, Size: 18.77 KB, User: jdoe, IP: 203.0.113.25
+127511|Oct  1 16:37:22 NAS01 FileStation Event: delete, Path: /Shared/Q3 report.docx, File/Folder: File, Size: 18.77 KB, User: jdoe, IP: 203.0.113.25
