@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.0 - 2026-10-01
+
+- Added `superops/synology-wazuh-install-superops.sh`, a SuperOps RMM edition driven by runtime variables. It writes timestamped output to the run log and exits 1 on any failure or warning.
+- Added `tools/build-superops.py`, which generates the SuperOps edition from the command-line script. The test suite fails if the two are out of step.
+- Test suite extended to cover the SuperOps edition (50 checks).
+
 ## 1.0.0 - 2026-10-01
 
 Initial release.

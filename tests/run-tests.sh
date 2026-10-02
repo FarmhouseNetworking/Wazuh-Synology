@@ -147,6 +147,23 @@ check "rejects a bad address"                bash -c "! OSSEC_DIR='$T' bash '$SC
 check "requires --nas-ip"                    bash -c "! OSSEC_DIR='$T' bash '$SCRIPT' >'$WORK/out.txt' 2>&1"
 check "rejects a bad protocol"               bash -c "! OSSEC_DIR='$T' bash '$SCRIPT' --nas-ip 192.0.2.10 --protocol tls >'$WORK/out.txt' 2>&1"
 
+echo "SuperOps edition"
+SO="$REPO/superops/synology-wazuh-install-superops.sh"
+so() { env OSSEC_DIR="$T" BACKUP_ROOT="$WORK/backups" "$@" bash "$SO" >"$WORK/out.txt" 2>&1; }
+mk_tree
+check "generated file is up to date"         python3 "$REPO/tools/build-superops.py" --check
+check "install via runtime variables"        so SynologyNasIp=192.0.2.10 SynologyRestart=No SynologyOpenFirewall=no
+check "self-test passed"                     out_has 'Self-test passed'
+check "one listener block written"           count_is 'BEGIN synology-wazuh-install' 1
+# shellcheck disable=SC2016  # literal "$Name" is what SuperOps leaves when a variable is not filled in
+check "unfilled variables fall back"         so SynologyNasIp=192.0.2.10 SynologyRestart=no SynologyOpenFirewall=no 'SynologyPort=$SynologyPort' 'SynologyAction=$SynologyAction'
+check "default port used"                    count_is '<port>514</port>' 1
+check "status action exits 0"                so SynologyAction=status
+check "uninstall action exits 0"             so SynologyAction=Uninstall SynologyRestart=no SynologyOpenFirewall=no
+check "ossec.conf identical to the original" conf_same "$WORK/orig.conf"
+check "missing SynologyNasIp exits 1"        bash -c "! env OSSEC_DIR='$T' bash '$SO' >'$WORK/out.txt' 2>&1"
+check "error names the runtime variable"     out_has 'SynologyNasIp runtime variable is required'
+
 echo
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

@@ -23,7 +23,7 @@
 
 set -uo pipefail
 
-SCRIPT_VERSION="1.0.0"
+SCRIPT_VERSION="1.1.0"
 
 # ----------------------------- CONFIGURATION ---------------------------------
 NAS_IP="${NAS_IP:-}"                      # NAS address(es), comma-separated, IPv4 or IPv4/CIDR

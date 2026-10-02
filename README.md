@@ -11,11 +11,13 @@ Wazuh does not ship Synology decoders, so without this the NAS's syslog arrives 
 
 | File | Purpose |
 |---|---|
-| `synology-wazuh-install.sh` | Installer, status check and uninstaller. Self-contained: it can be copied to the manager on its own. |
+| `synology-wazuh-install.sh` | Installer, status check and uninstaller for the command line. Self-contained: it can be copied to the manager on its own. |
+| `superops/synology-wazuh-install-superops.sh` | The same installer, set up for SuperOps RMM runtime variables |
 | `decoders/9999_synology_decoders.xml` | Reference copy of the decoders (the installer writes them for you) |
 | `rules/9999_synology_rules.xml` | Reference copy of the rules, with the default IDs |
 | `tests/sample-logs.txt` | Real DSM log lines (names and addresses replaced) and the rule each one must hit |
-| `tests/run-tests.sh` | Test suite that runs the installer against a fake Wazuh tree |
+| `tests/run-tests.sh` | Test suite that runs both editions of the installer against a fake Wazuh tree |
+| `tools/build-superops.py` | Generates the SuperOps edition from the command-line script, so the two cannot drift apart |
 | `docs/TROUBLESHOOTING.md` | Every problem hit while building this, with cause and fix |
 
 ---
@@ -46,7 +48,9 @@ You can run it again safely. A second run replaces the listener block and both f
 
 ---
 
-## Step 1: Run the installer on the Wazuh manager
+## Step 1a: Run it from the command line
+
+On the Wazuh manager:
 
 ```bash
 git clone https://github.com/FarmhouseNetworking/Wazuh-Synology.git
@@ -70,6 +74,30 @@ Replace `192.0.2.10` with your NAS's address. For more than one NAS, separate th
 Every option also has an environment variable (`NAS_IP`, `SYSLOG_PORT`, `SYSLOG_PROTO`, `RULE_BASE`, `ADD_LISTENER`, `OPEN_FIREWALL`, `RESTART`, `FORCE`), which is useful when running from an RMM.
 
 The default rule range starts at 127500 so that it does not collide with [Duo-Wazuh-LogSync](https://github.com/FarmhouseNetworking/Duo-Wazuh-LogSync), which uses 120000–120039.
+
+---
+
+## Step 1b: Run it from SuperOps RMM
+
+1. In SuperOps, go to **Scripts → New Script**, choose language **Bash** and platform **Linux**, and paste in `superops/synology-wazuh-install-superops.sh`.
+2. Create these **runtime variables**. The names must match exactly:
+
+| Variable | Required | Example |
+|---|---|---|
+| `SynologyNasIp` | yes, for install | `192.0.2.10` (comma-separated for more than one NAS) |
+| `SynologyAction` | no | `install` (default), `status` or `uninstall` |
+| `SynologyPort` | no | `514` |
+| `SynologyProtocol` | no | `tcp` (default) or `udp` |
+| `SynologyRuleBase` | no | `127500` |
+| `SynologyAddListener` | no | `yes` (default) or `no` when the NAS is already allowed in an existing syslog listener |
+| `SynologyOpenFirewall` | no | `yes` (default) or `no` |
+| `SynologyRestart` | no | `yes` (default) or `no` to install and test without restarting the manager |
+| `SynologyForce` | no | `no` (default) or `yes` |
+
+3. Run the script **as root** against the Wazuh manager asset.
+4. The script exits `0` on success and `1` on any failure or warning, so SuperOps marks a broken install as failed. All output appears in the run log, including the NAS settings for Step 2.
+
+Tip: after the NAS is configured, run the script again with `SynologyAction` set to `status` to see the listener, the installed files and the latest Synology alerts in the run log. Scheduled weekly, that doubles as a health check for compliance reporting.
 
 ---
 
@@ -112,6 +140,8 @@ Sign in to DSM once with a wrong password and once correctly, and upload then de
 ```bash
 sudo ./synology-wazuh-install.sh status
 ```
+
+From SuperOps, run the script with `SynologyAction` set to `status` instead.
 
 `status` shows the listener block, the installed files, the listening socket and the last ten Synology alerts. You should see rules 127502, 127501, 127510 and 127511.
 
@@ -180,6 +210,8 @@ For NIST SP 800-171 / CMMC Level 2, these logs support **3.3.1** (create and ret
 sudo ./synology-wazuh-install.sh uninstall
 ```
 
+From SuperOps, run the script with `SynologyAction` set to `uninstall`.
+
 This backs up `ossec.conf`, removes the listener block, both files and the firewall rule, validates the configuration and restarts the manager. Then turn off **Send logs to a syslog server** on the NAS.
 
 ---
@@ -190,7 +222,7 @@ This backs up `ossec.conf`, removes the listener block, both files and the firew
 sudo tests/run-tests.sh
 ```
 
-The suite builds a fake Wazuh tree in a temp directory and checks installation, re-runs, uninstall, rule renumbering, every refusal path and both rollback paths. Its stand-in for `wazuh-logtest` imitates how Wazuh selects decoders and rules, which checks the regular expressions in the XML, but it is not Wazuh. The installer's own self-test, run on a real manager, is the check that counts.
+The suite builds a fake Wazuh tree in a temp directory and checks installation, re-runs, uninstall, rule renumbering, every refusal path, both rollback paths and the SuperOps edition. Its stand-in for `wazuh-logtest` imitates how Wazuh selects decoders and rules, which checks the regular expressions in the XML, but it is not Wazuh. The installer's own self-test, run on a real manager, is the check that counts.
 
 ---
 
