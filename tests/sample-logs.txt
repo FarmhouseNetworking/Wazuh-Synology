@@ -1,9 +1,67 @@
-# Real DSM 7 syslog lines (BSD / RFC 3164), with names and addresses replaced.
+# Real DSM 7 syslog lines with names and addresses replaced, and the rule each must hit.
 # Format: <expected rule ID with the default RULE_BASE>|<log line>
-# Paste a line (without the "ID|" prefix) into /var/ossec/bin/wazuh-logtest to check it by hand.
+# "System" lines have a TAB after the colon. Paste a line (without the "ID|" prefix)
+# into /var/ossec/bin/wazuh-logtest to check it by hand.
+#
+# Connection: captured on the wire from a DSM 7 NAS
 127502|Oct  1 16:22:41 NAS01 Connection: User [jdoe] from [203.0.113.25] failed to sign in to [DSM] via [password] due to authorization failure.
 127500|Oct  1 16:36:49 NAS01 Connection: User [jdoe] from [203.0.113.25] has successfully passed the first authentication of 2FA via [password]
 127501|Oct  1 16:36:55 NAS01 Connection: User [jdoe] from [203.0.113.25] signed in to [DSM] successfully via [password].
+# Connection: message text from a DSM 7 Log Center export, in the wire format above
+127502|Oct  9 08:12:10 NAS01 Connection: User [] from [198.51.100.73] failed to sign in to [DSM] via [password] due to authorization failure.
+127502|Feb 27 00:36:56 NAS01 Connection: User [admin] from [192.0.2.5] failed to log in via [SSH] due to authorization failure.
+127506|Jul 31 00:40:02 NAS01 Connection: Host [192.0.2.2] failed to connect via [SMB] due to [SMB1 not permitted].
+127506|Oct 20 09:15:00 NAS01 Connection: User [guest] from [192.0.2.48] failed to log in via [SMB] due to [NTLMv1 not permitted].
+127501|Mar 30 13:26:39 NAS01 Connection: User [jdoe] from [192.0.2.159] logged in successfully via [DSM].
+127505|Mar 30 13:12:18 NAS01 Connection: User [admin] from [192.0.2.159] logged in successfully via [DSM].
+# Connection: published third-party sample (DSM 7.0), not yet seen on a tested NAS
+127507|Sep 20 17:14:32 NAS01 Connection: User [jdoe] from [PC01(192.0.2.59)] via [CIFS(SMB3)] accessed shared folder [Projects].
+#
+# File activity: captured on the wire (File Station); SMB from a published third-party sample
 127510|Oct  1 16:37:11 NAS01 FileStation Event: upload, Path: /Shared/Quarterly report.docx, File/Folder: File, Size: 18.77 KB, User: jdoe, IP: 203.0.113.25
 127510|Oct  1 16:37:18 NAS01 FileStation Event: rename, Path: /Shared/Quarterly report.docx -> /Shared/Q3 report.docx, File/Folder: File, Size: 18.77 KB, User: jdoe, IP: 203.0.113.25
 127511|Oct  1 16:37:22 NAS01 FileStation Event: delete, Path: /Shared/Q3 report.docx, File/Folder: File, Size: 18.77 KB, User: jdoe, IP: 203.0.113.25
+127510|Sep 19 22:53:05 NAS01 WinFileService Event: write, Path: /Projects/notes.txt, File/Folder: File, Size: 1.71 KB, User: jdoe, IP: 192.0.2.59
+#
+# Test log and System: captured on the wire
+127508|Oct 12 14:30:00 NAS01 System Test message from Synology Syslog Client from (192.0.2.1)
+127530|Oct 12 14:33:59 NAS01 System jdoe:	Scheduled Task [wazuh-test] was created.
+127530|Oct 12 14:34:40 NAS01 System jdoe:	Scheduled Task [wazuh-test] was removed.
+# System: message text from a DSM 7 Log Center export, in the wire format above
+127520|Oct  1 16:52:34 NAS01 System SYSTEM:	System successfully stopped [QuickConnect].
+127528|Jun 26 16:38:08 NAS01 System SYSTEM:	System successfully started [QuickConnect].
+127527|Oct  1 16:25:00 NAS01 System jdoe:	[SMB Log Level]: [read] was disabled
+127521|May  1 09:16:37 NAS01 System jdoe:	User [jdoe2] was created.
+127524|May  1 09:16:38 NAS01 System jdoe:	User [jdoe2] was added to the group [administrators].
+127523|Mar 31 17:04:59 NAS01 System jdoe:	User [admin] was disabled.
+127525|Mar 31 11:15:29 NAS01 System jdoe:	Password of the user [backup-admin] was changed.
+127526|Mar 30 13:28:20 NAS01 System jdoe:	The app privilege on app [SYNO.Rsync] for user [backup-admin] was removed.
+127531|Sep 20 22:38:14 NAS01 System jdoe:	Package [Text Editor] has been successfully installed.
+127520|Jun 26 16:38:08 NAS01 System jdoe:	Package [QuickConnect] has been successfully updated.
+127520|Sep 18 02:07:20 NAS01 System SYSTEM:	Metadata of shared folder [usbshare1] was deleted.
+127533|Mar  3 10:00:00 NAS01 System jdoe:	Start to empty recycle bin of shared folder [Projects].
+127534|Oct  1 14:14:38 NAS01 System SYSTEM_ADMIN:	Successfully add certificate [Active Backup for Business].
+127535|Mar 31 11:14:16 NAS01 System jdoe:	DNS server setting was changed.
+127520|Mar 22 14:50:12 NAS01 System SYSTEM:	[Active Backup for Google Workspace] service was started.
+127540|Oct  2 16:54:12 NAS01 System SYSTEM:	Storage Pool [1] degraded [3/4 of drives remaining]. Please repair it.
+127541|Oct  2 16:54:09 NAS01 System jdoe:	Drive (SN:ZC00TEST) has been deactivated.
+127542|Aug 12 08:18:59 NAS01 System SYSTEM:	The iSCSI LUN [LUN1,LUN2] reaches hard limit and becomes read-only.
+127543|Aug 19 05:17:58 NAS01 System SYSTEM:	The iSCSI LUN [LUN1,LUN2] reaches soft limit.
+127544|Aug 12 07:59:47 NAS01 System SYSTEM:	Detected low storage space on Volume [1].
+127545|Sep 30 13:54:37 NAS01 System SYSTEM:	The power supply 1 has stopped providing power.
+127546|Jul 10 13:18:01 NAS01 System SYSTEM:	Server is on battery.
+127547|Jul 14 08:00:00 NAS01 System SYSTEM:	System booted up from an improper shutdown.
+127548|Jun  3 14:26:24 NAS01 System SYSTEM:	IP conflict at [Bond 1] with ip address [192.0.2.70] by [00:00:5E:00:53:01].
+127549|Sep 24 00:01:24 NAS01 System SYSTEM:	Failed to send email. (Failed to connect to smtp.office365.com:587).
+127550|Sep  3 09:59:50 NAS01 System SYSTEM:	The external device [USB Disk 1] was not ejected properly. You should eject the device before unplugging it or turning it off.
+127551|Sep  3 10:03:19 NAS01 System SYSTEM:	External disk [USB Disk 1] is mounted and shared folder [usbshare1] is exported.
+127552|Aug 13 14:10:30 NAS01 System SYSTEM:	[LAN 5] link down.
+127520|Aug 13 14:10:39 NAS01 System SYSTEM:	[LAN 5] link up.
+127554|Feb 13 21:00:00 NAS01 System jdoe:	System started counting down to reboot.
+# System: published third-party samples (DSM 7.0), not yet seen on a tested NAS
+127522|Sep 20 22:51:43 NAS01 System jdoe:	System successfully deleted User [jdoe2].
+127529|Sep 20 17:37:09 NAS01 System jdoe:	SNMP service was started.
+127532|Sep 20 23:19:19 NAS01 System jdoe:	Normal shared folder [Projects] was deleted.
+127536|Sep 19 14:35:57 NAS01 System jdoe:	Server date/time was changed to [2026/09/19 14:35:57] from [2026/09/19 14:30:36].
+127537|Sep 20 17:21:25 NAS01 System jdoe:	System successfully set [Allowing SSL/TLS connection] to [Disabled].
+127527|Sep 20 16:55:55 NAS01 System jdoe:	[Enable SMB Log] was disabled.

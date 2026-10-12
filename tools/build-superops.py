@@ -61,6 +61,7 @@ CONFIG = '''# ------------------- SUPEROPS RUNTIME VARIABLES -------------------
 #   SynologyOpenFirewall  yes | no                             (optional, default yes)
 #   SynologyRestart       yes | no                             (optional, default yes)
 #   SynologyForce         yes | no                             (optional, default no)
+#   SynologyWatchUsers    account(s) whose every sign-in alerts (optional, comma-separated)
 set +u
 NAS_IP="$SynologyNasIp"
 ACTION="$SynologyAction"
@@ -71,6 +72,7 @@ ADD_LISTENER="$SynologyAddListener"
 OPEN_FIREWALL="$SynologyOpenFirewall"
 RESTART="$SynologyRestart"
 FORCE="$SynologyForce"
+WATCH_USERS="$SynologyWatchUsers"
 set -u
 # Defaults for optional variables left blank in SuperOps
 [[ "$NAS_IP" == \\$* ]] && NAS_IP=""
@@ -82,6 +84,7 @@ set -u
 [[ -z "$OPEN_FIREWALL" || "$OPEN_FIREWALL" == \\$* ]] && OPEN_FIREWALL="yes"
 [[ -z "$RESTART"       || "$RESTART"       == \\$* ]] && RESTART="yes"
 [[ -z "$FORCE"         || "$FORCE"         == \\$* ]] && FORCE="no"
+[[ "$WATCH_USERS" == \\$* ]] && WATCH_USERS=""
 ACTION="${ACTION,,}"; SYSLOG_PROTO="${SYSLOG_PROTO,,}"; ADD_LISTENER="${ADD_LISTENER,,}"
 OPEN_FIREWALL="${OPEN_FIREWALL,,}"; RESTART="${RESTART,,}"; FORCE="${FORCE,,}"
 # -----------------------------------------------------------------------------

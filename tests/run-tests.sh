@@ -105,7 +105,19 @@ check "decoder and rule files removed"       no_files
 echo "Custom rule base"
 check "installer exits 0 with --rule-base"   run "${INSTALL[@]}" --rule-base 130000
 check "rules renumbered"                     grep -q 'id="130012"' "$T/etc/rules/9999_synology_rules.xml"
-check "no default IDs left behind"           bash -c "! grep -q '1275[01][0-9]' '$T/etc/rules/9999_synology_rules.xml'"
+check "no default IDs left behind"           bash -c "! grep -q '1275[0-5][0-9]' '$T/etc/rules/9999_synology_rules.xml'"
+check "renumbered self-test passed"          out_has 'Self-test passed'
+
+echo "Watched accounts"
+mk_tree
+check "installer exits 0 with --watch-users" run "${INSTALL[@]}" --watch-users "backup-admin, ops.user"
+check "watch rule written"                   grep -q 'id="127509"' "$T/etc/rules/9999_synology_rules.xml"
+check "dot in a name is escaped"             grep -qF 'ops\.user' "$T/etc/rules/9999_synology_rules.xml"
+got="$(printf '%s\n' 'Oct  1 16:36:55 NAS01 Connection: User [Backup-Admin] from [192.0.2.9] signed in to [DSM] successfully via [password].' | "$T/bin/wazuh-logtest" | sed -n "s/^[[:space:]]*id: '\([0-9]*\)'.*/\1/p" | tail -n 1)"
+check "watched sign-in hits 127509"          [ "$got" = "127509" ]
+got="$(printf '%s\n' 'Oct  1 16:36:55 NAS01 Connection: User [jdoe] from [192.0.2.9] signed in to [DSM] successfully via [password].' | "$T/bin/wazuh-logtest" | sed -n "s/^[[:space:]]*id: '\([0-9]*\)'.*/\1/p" | tail -n 1)"
+check "other sign-ins still hit 127501"      [ "$got" = "127501" ]
+check "rejects an unsafe account name"       bash -c "! OSSEC_DIR='$T' BACKUP_ROOT='$WORK/backups' bash '$SCRIPT' ${INSTALL[*]} --watch-users 'bad|name' >'$WORK/out.txt' 2>&1"
 
 echo "Refuses to run when a rule ID is taken"
 mk_tree
@@ -159,6 +171,8 @@ check "one listener block written"           count_is 'BEGIN synology-wazuh-inst
 check "unfilled variables fall back"         so SynologyNasIp=192.0.2.10 SynologyRestart=no SynologyOpenFirewall=no 'SynologyPort=$SynologyPort' 'SynologyAction=$SynologyAction'
 check "default port used"                    count_is '<port>514</port>' 1
 check "status action exits 0"                so SynologyAction=status
+check "SynologyWatchUsers honoured"          so SynologyNasIp=192.0.2.10 SynologyRestart=no SynologyOpenFirewall=no SynologyWatchUsers=backup-admin
+check "watch rule written (SuperOps)"        grep -q 'id="127509"' "$T/etc/rules/9999_synology_rules.xml"
 check "uninstall action exits 0"             so SynologyAction=Uninstall SynologyRestart=no SynologyOpenFirewall=no
 check "ossec.conf identical to the original" conf_same "$WORK/orig.conf"
 check "missing SynologyNasIp exits 1"        bash -c "! env OSSEC_DIR='$T' bash '$SO' >'$WORK/out.txt' 2>&1"

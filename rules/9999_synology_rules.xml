@@ -2,15 +2,32 @@
   Synology DSM 7.x rules
   https://github.com/FarmhouseNetworking/Wazuh-Synology
 
-  IDs 127500-127512 by default (the installer renumbers with RULE_BASE).
+  IDs 127500-127554 by default (the installer renumbers with RULE_BASE).
+  The ten IDs after the last one are reserved for backup job rules.
   action and dstuser are static Wazuh fields and cannot be matched with a
-  field element, which is why the decoder emits syno_action and the admin
-  rule matches on the log text.
+  field element, which is why the decoders emit syno_action and the rules
+  match on the log text.
+  Wazuh checks a parent's children from the highest level to the lowest,
+  and in file order within the same level; the first match wins. 127506 is
+  defined before 127502 (both level 5) so legacy SMB refusals are not
+  counted as failed sign-ins.
 -->
 <group name="synology,">
+
+  <!-- Connection (sign-in, SMB, auto-block) -->
   <rule id="127500" level="3">
     <decoded_as>synology-conn</decoded_as>
     <description>Synology: connection event</description>
+  </rule>
+  <rule id="127506" level="5">
+    <if_sid>127500</if_sid>
+    <match type="pcre2">due to \[(?:SMB1|NTLMv1) not permitted\]</match>
+    <description>Synology: legacy SMB1/NTLMv1 connection refused from $(srcip) ($(syno_reason))</description>
+  </rule>
+  <rule id="127507" level="3">
+    <if_sid>127500</if_sid>
+    <match type="pcre2">accessed shared folder \[</match>
+    <description>Synology: $(dstuser) from $(srcip) accessed shared folder $(syno_share) via $(service)</description>
   </rule>
   <rule id="127501" level="3">
     <if_sid>127500</if_sid>
@@ -21,7 +38,7 @@
   <rule id="127502" level="5">
     <if_sid>127500</if_sid>
     <match type="pcre2">failed to (?:log|sign) in</match>
-    <description>Synology: failed sign-in for $(dstuser) from $(srcip)</description>
+    <description>Synology: failed sign-in for $(dstuser) from $(srcip) via $(service)</description>
     <group>authentication_failed,</group>
   </rule>
   <rule id="127503" level="10" frequency="6" timeframe="120">
@@ -40,7 +57,13 @@
     <match type="pcre2">User \[(?i:admin|administrator|root)\]</match>
     <description>Synology: built-in admin account sign-in from $(srcip)</description>
   </rule>
+  <!--WATCH_USERS_RULE-->
+  <rule id="127508" level="3">
+    <decoded_as>synology-testlog</decoded_as>
+    <description>Synology: test log received (Log Center, Send test log)</description>
+  </rule>
 
+  <!-- File activity (File Station and SMB transfer logs) -->
   <rule id="127510" level="3">
     <decoded_as>synology-file</decoded_as>
     <description>Synology file $(syno_action): $(file_path) by $(dstuser) from $(srcip)</description>
@@ -54,5 +77,177 @@
     <if_matched_sid>127511</if_matched_sid>
     <same_user />
     <description>Synology: mass deletion by $(dstuser) - possible ransomware or data destruction</description>
+  </rule>
+
+  <!-- System: security-relevant changes -->
+  <rule id="127520" level="3">
+    <decoded_as>synology-system</decoded_as>
+    <description>Synology system: $(syno_event) (by $(srcuser))</description>
+  </rule>
+  <rule id="127524" level="10">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">(?i)was added to the group \[administrators\]</match>
+    <description>Synology: user $(syno_object) added to administrators by $(srcuser)</description>
+  </rule>
+  <rule id="127521" level="8">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">User \[[^\]]*\] was created</match>
+    <description>Synology: user $(syno_object) created by $(srcuser)</description>
+  </rule>
+  <rule id="127522" level="8">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">deleted User \[</match>
+    <description>Synology: user $(syno_object) deleted by $(srcuser)</description>
+  </rule>
+  <rule id="127523" level="5">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">User \[[^\]]*\] was disabled</match>
+    <description>Synology: user $(syno_object) disabled by $(srcuser)</description>
+  </rule>
+  <rule id="127525" level="5">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">Password of the user \[</match>
+    <description>Synology: password changed for $(syno_object) by $(srcuser)</description>
+  </rule>
+  <rule id="127526" level="5">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">app privilege</match>
+    <description>Synology: app privilege changed by $(srcuser) - $(syno_event)</description>
+  </rule>
+  <rule id="127527" level="10">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">Log Level\]: \[[^\]]*\] was disabled|\[Enable [^\]]* Log\] was disabled|(?i:transfer log)[^.]*disabled</match>
+    <description>Synology: audit logging reduced by $(srcuser) - $(syno_event)</description>
+  </rule>
+  <rule id="127528" level="10">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">successfully started \[QuickConnect\]</match>
+    <description>Synology: QuickConnect started - DSM may be reachable from the internet</description>
+  </rule>
+  <rule id="127529" level="8">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">(?i)\b(?:SSH|Telnet|FTPS?|SFTP|TFTP|SNMP|rsync|WebDAV)\]? service was started</match>
+    <description>Synology: remote access service started by $(srcuser) - $(syno_event)</description>
+  </rule>
+  <rule id="127530" level="5">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">Scheduled Task \[.*\] was (?:created|removed|renamed)</match>
+    <description>Synology: scheduled task change by $(srcuser) - $(syno_event)</description>
+  </rule>
+  <rule id="127531" level="5">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">Package \[[^\]]*\] has been successfully (?:installed|uninstalled)</match>
+    <description>Synology: package $(syno_object) installed or removed by $(srcuser)</description>
+  </rule>
+  <rule id="127532" level="8">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">^System \S+:\s+(?:\S+ )?shared folder \[[^\]]*\] was (?:deleted|renamed)</match>
+    <description>Synology: shared folder $(syno_object) deleted or renamed by $(srcuser)</description>
+  </rule>
+  <rule id="127533" level="5">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">(?i)empty recycle bin</match>
+    <description>Synology: recycle bin emptied - $(syno_event)</description>
+  </rule>
+  <rule id="127534" level="5">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">(?i)certificate</match>
+    <description>Synology: certificate change by $(srcuser) - $(syno_event)</description>
+  </rule>
+  <rule id="127535" level="5">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">IP of \[|Subnet mask of \[|DNS server setting was changed|Server name was changed</match>
+    <description>Synology: network setting changed by $(srcuser) - $(syno_event)</description>
+  </rule>
+  <rule id="127536" level="8">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">Server date/time was changed|Network time synchronization</match>
+    <description>Synology: time or NTP setting changed by $(srcuser) - $(syno_event)</description>
+  </rule>
+  <rule id="127537" level="5">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">SSL/TLS</match>
+    <description>Synology: SSL/TLS setting changed by $(srcuser) - $(syno_event)</description>
+  </rule>
+  <rule id="127538" level="10">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">(?i)disabled auto block</match>
+    <description>Synology: auto block disabled by $(srcuser)</description>
+  </rule>
+
+  <!-- System: storage, power and hardware -->
+  <rule id="127540" level="12">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">Storage Pool \[[^\]]*\] degraded</match>
+    <description>Synology: storage pool degraded - $(syno_event)</description>
+  </rule>
+  <rule id="127541" level="8">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">has been deactivated</match>
+    <description>Synology: drive deactivated - $(syno_event)</description>
+  </rule>
+  <rule id="127542" level="12">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">reaches hard limit</match>
+    <description>Synology: iSCSI LUN full and read-only - $(syno_event)</description>
+  </rule>
+  <rule id="127543" level="7">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">reaches soft limit</match>
+    <description>Synology: iSCSI LUN nearly full - $(syno_event)</description>
+  </rule>
+  <rule id="127544" level="8">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">low storage space</match>
+    <description>Synology: low storage space - $(syno_event)</description>
+  </rule>
+  <rule id="127545" level="10">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">stopped providing power</match>
+    <description>Synology: power supply failure - $(syno_event)</description>
+  </rule>
+  <rule id="127546" level="5">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">is on battery</match>
+    <description>Synology: running on UPS battery</description>
+  </rule>
+  <rule id="127547" level="8">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">improper shutdown</match>
+    <description>Synology: booted after an improper shutdown</description>
+  </rule>
+  <rule id="127548" level="8">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">IP conflict at</match>
+    <description>Synology: IP address conflict - $(syno_event)</description>
+  </rule>
+  <rule id="127549" level="7">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">Failed to send email</match>
+    <description>Synology: email notification failed - NAS alerts are not being delivered</description>
+  </rule>
+  <rule id="127550" level="5">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">was not ejected properly</match>
+    <description>Synology: external device removed without ejecting - $(syno_object)</description>
+  </rule>
+  <rule id="127551" level="5">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">External disk \[[^\]]*\] is mounted</match>
+    <description>Synology: external disk $(syno_object) connected</description>
+  </rule>
+  <rule id="127552" level="3">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">\] link down\.</match>
+    <description>Synology: network link down on $(syno_object)</description>
+  </rule>
+  <rule id="127553" level="8" frequency="10" timeframe="600">
+    <if_matched_sid>127552</if_matched_sid>
+    <description>Synology: network links flapping - 10 link-down events in 10 minutes</description>
+  </rule>
+  <rule id="127554" level="5">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">counting down to (?:reboot|shutdown)</match>
+    <description>Synology: reboot or shutdown started by $(srcuser)</description>
   </rule>
 </group>

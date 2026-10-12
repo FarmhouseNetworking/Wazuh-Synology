@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Stand-in for wazuh-logtest used by tests/run-tests.sh. Imitates Wazuh pre-decoding,
-enough to exercise the Synology decoder/rule XML. Mirrors analysisd's behaviour:
-events WITH a program_name only try decoders that declare <program_name>."""
+decoder selection and rule matching closely enough to exercise the Synology XML:
+events WITH a program_name only try decoders that declare <program_name>, sibling
+decoders all run, and children are tried highest level first."""
 import os, re, sys
 import xml.etree.ElementTree as ET
 base = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
@@ -55,13 +56,16 @@ for line in sys.stdin:
         for f in r.findall("field"):
             if not re.search(f.text, fields.get(f.get("name"), "")): return False
         return True
+    # analysisd keeps each parent's children sorted by level, highest first,
+    # in load order within a level (rules_list.c _OS_AddRule)
+    ordered = sorted(rules, key=lambda x: -int(x.get("level")))
     def descend(r):
-        for c in rules:
+        for c in ordered:
             s = c.find("if_sid")
             if s is not None and s.text == r.get("id") and matches(c):
                 return descend(c)
         return r
-    hit = next((r for r in rules if r.find("decoded_as") is not None and matches(r)), None)
+    hit = next((r for r in ordered if r.find("decoded_as") is not None and matches(r)), None)
     if hit is None: print("**Phase 3: no rule"); continue
     hit = descend(hit)
     print("**Phase 3: Completed filtering (rules).\n        id: '%s'\n        level: '%s'" % (hit.get("id"), hit.get("level")))

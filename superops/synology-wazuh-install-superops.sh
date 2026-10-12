@@ -25,7 +25,7 @@
 set -uo pipefail
 exec 2>&1
 
-SCRIPT_VERSION="1.1.0"
+SCRIPT_VERSION="1.2.0"
 
 # ------------------- SUPEROPS RUNTIME VARIABLES ------------------------------
 # Create these as Runtime Variables on the SuperOps script (names must match).
@@ -38,6 +38,7 @@ SCRIPT_VERSION="1.1.0"
 #   SynologyOpenFirewall  yes | no                             (optional, default yes)
 #   SynologyRestart       yes | no                             (optional, default yes)
 #   SynologyForce         yes | no                             (optional, default no)
+#   SynologyWatchUsers    account(s) whose every sign-in alerts (optional, comma-separated)
 set +u
 NAS_IP="$SynologyNasIp"
 ACTION="$SynologyAction"
@@ -48,6 +49,7 @@ ADD_LISTENER="$SynologyAddListener"
 OPEN_FIREWALL="$SynologyOpenFirewall"
 RESTART="$SynologyRestart"
 FORCE="$SynologyForce"
+WATCH_USERS="$SynologyWatchUsers"
 set -u
 # Defaults for optional variables left blank in SuperOps
 [[ "$NAS_IP" == \$* ]] && NAS_IP=""
@@ -59,6 +61,7 @@ set -u
 [[ -z "$OPEN_FIREWALL" || "$OPEN_FIREWALL" == \$* ]] && OPEN_FIREWALL="yes"
 [[ -z "$RESTART"       || "$RESTART"       == \$* ]] && RESTART="yes"
 [[ -z "$FORCE"         || "$FORCE"         == \$* ]] && FORCE="no"
+[[ "$WATCH_USERS" == \$* ]] && WATCH_USERS=""
 ACTION="${ACTION,,}"; SYSLOG_PROTO="${SYSLOG_PROTO,,}"; ADD_LISTENER="${ADD_LISTENER,,}"
 OPEN_FIREWALL="${OPEN_FIREWALL,,}"; RESTART="${RESTART,,}"; FORCE="${FORCE,,}"
 # -----------------------------------------------------------------------------
@@ -72,7 +75,8 @@ BACKUP_ROOT="${BACKUP_ROOT:-/root}"
 MARK_BEGIN="<!-- BEGIN synology-wazuh-install listener -->"
 MARK_END="<!-- END synology-wazuh-install listener -->"
 DEFAULT_BASE=127500
-RULE_OFFSETS="00 01 02 03 04 05 10 11 12"
+RULE_OFFSETS="00 01 02 03 04 05 06 07 08 09 10 11 12 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54"
+LAST_OFFSET=54
 
 BACKUP_DIR=""
 HAD_DEC=0
@@ -109,6 +113,8 @@ Options:
                        allowed in an existing syslog listener)
   --no-firewall        Do not touch ufw / firewalld
   --no-restart         Install and test, but do not restart wazuh-manager
+  --watch-users LIST   Accounts whose every sign-in raises a level 10 alert,
+                       comma-separated, e.g. a break-glass account (env WATCH_USERS)
   --force              Install even if other Synology rules/decoders exist
   -h, --help           Show this help
   -V, --version        Show the version
@@ -129,6 +135,7 @@ while [ $# -gt 0 ]; do
     --no-listener) ADD_LISTENER="no" ;;
     --no-firewall) OPEN_FIREWALL="no" ;;
     --no-restart)  RESTART="no" ;;
+    --watch-users) WATCH_USERS="${2:-}"; shift ;;
     --force)       FORCE="yes" ;;
     -h|--help)     usage; exit 0 ;;
     -V|--version)  echo "$SCRIPT_VERSION"; exit 0 ;;
@@ -139,6 +146,8 @@ done
 
 # ------------------------------- HELPERS -------------------------------------
 rule_id() { echo $(( RULE_BASE + 10#$1 )); }
+
+watch_list() { printf '%s\n' "$WATCH_USERS" | tr ',' '\n' | sed 's/[[:space:]]//g' | sed '/^$/d'; }
 
 nas_list() { printf '%s\n' "$NAS_IP" | tr ',' '\n' | sed 's/[[:space:]]//g' | sed '/^$/d'; }
 
@@ -244,28 +253,43 @@ write_decoders() {
   Wazuh only tries decoders that declare program_name against such events,
   so synology-conn must declare it.
 
-  FileStation Event lines contain a space before the colon, so Wazuh sets
-  no program_name and only tries decoders without one. synology-file must
-  not declare program_name.
+  FileStation Event, WinFileService Event and System lines have a space
+  where Wazuh looks for the program name, so Wazuh sets no program_name and
+  only tries decoders without one. Those decoders must not declare it.
 -->
 <decoder name="synology-conn">
   <program_name>^Connection$</program_name>
-  <prematch type="pcre2">User \[[^\]]+\] from \[[^\]]+\]|Host \[[^\]]+\] was blocked</prematch>
+  <prematch type="pcre2">User \[[^\]]*\] from \[[^\]]+\]|Host \[[^\]]+\] (?:was blocked|failed to connect)</prematch>
 </decoder>
 <decoder name="synology-conn-fields">
   <parent>synology-conn</parent>
-  <regex type="pcre2">User \[([^\]]+)\] from \[([^\]]+)\]</regex>
+  <regex type="pcre2">User \[([^\]]*)\] from \[(?:[^\]\(]*\()?([^\]\)]+)\)?\]</regex>
   <order>dstuser, srcip</order>
 </decoder>
 <decoder name="synology-conn-fields">
   <parent>synology-conn</parent>
-  <regex type="pcre2">Host \[([^\]]+)\] was blocked</regex>
+  <regex type="pcre2">from \[([^\]\(]+)\(</regex>
+  <order>src_hostname</order>
+</decoder>
+<decoder name="synology-conn-fields">
+  <parent>synology-conn</parent>
+  <regex type="pcre2">Host \[([^\]]+)\] (?:was blocked|failed to connect)</regex>
   <order>srcip</order>
 </decoder>
 <decoder name="synology-conn-fields">
   <parent>synology-conn</parent>
   <regex type="pcre2">(?:via|to) \[([^\]]+)\]</regex>
   <order>service</order>
+</decoder>
+<decoder name="synology-conn-fields">
+  <parent>synology-conn</parent>
+  <regex type="pcre2">due to \[([^\]]+)\]</regex>
+  <order>syno_reason</order>
+</decoder>
+<decoder name="synology-conn-fields">
+  <parent>synology-conn</parent>
+  <regex type="pcre2">accessed shared folder \[([^\]]+)\]</regex>
+  <order>syno_share</order>
 </decoder>
 
 <decoder name="synology-file">
@@ -276,6 +300,24 @@ write_decoders() {
   <regex type="pcre2">(\w+), Path: (.+?), File/Folder: (\w+), Size: (.+?), User: (.+?), IP: (\S+)</regex>
   <order>syno_action, file_path, file_type, file_size, dstuser, srcip</order>
 </decoder>
+
+<decoder name="synology-system">
+  <prematch type="pcre2">^System \S+:\s</prematch>
+</decoder>
+<decoder name="synology-system-fields">
+  <parent>synology-system</parent>
+  <regex type="pcre2">^System (\S+):\s+(.+?)\s*$</regex>
+  <order>srcuser, syno_event</order>
+</decoder>
+<decoder name="synology-system-fields">
+  <parent>synology-system</parent>
+  <regex type="pcre2">:\s+[^\[]*\[([^\]]*)\]</regex>
+  <order>syno_object</order>
+</decoder>
+
+<decoder name="synology-testlog">
+  <prematch type="pcre2">^System Test message from Synology Syslog Client</prematch>
+</decoder>
 XMLEOF
 }
 
@@ -285,15 +327,32 @@ write_rules() {
   Synology DSM 7.x rules
   https://github.com/FarmhouseNetworking/Wazuh-Synology
 
-  IDs 127500-127512 by default (the installer renumbers with RULE_BASE).
+  IDs 127500-127554 by default (the installer renumbers with RULE_BASE).
+  The ten IDs after the last one are reserved for backup job rules.
   action and dstuser are static Wazuh fields and cannot be matched with a
-  field element, which is why the decoder emits syno_action and the admin
-  rule matches on the log text.
+  field element, which is why the decoders emit syno_action and the rules
+  match on the log text.
+  Wazuh checks a parent's children from the highest level to the lowest,
+  and in file order within the same level; the first match wins. 127506 is
+  defined before 127502 (both level 5) so legacy SMB refusals are not
+  counted as failed sign-ins.
 -->
 <group name="synology,">
+
+  <!-- Connection (sign-in, SMB, auto-block) -->
   <rule id="127500" level="3">
     <decoded_as>synology-conn</decoded_as>
     <description>Synology: connection event</description>
+  </rule>
+  <rule id="127506" level="5">
+    <if_sid>127500</if_sid>
+    <match type="pcre2">due to \[(?:SMB1|NTLMv1) not permitted\]</match>
+    <description>Synology: legacy SMB1/NTLMv1 connection refused from $(srcip) ($(syno_reason))</description>
+  </rule>
+  <rule id="127507" level="3">
+    <if_sid>127500</if_sid>
+    <match type="pcre2">accessed shared folder \[</match>
+    <description>Synology: $(dstuser) from $(srcip) accessed shared folder $(syno_share) via $(service)</description>
   </rule>
   <rule id="127501" level="3">
     <if_sid>127500</if_sid>
@@ -304,7 +363,7 @@ write_rules() {
   <rule id="127502" level="5">
     <if_sid>127500</if_sid>
     <match type="pcre2">failed to (?:log|sign) in</match>
-    <description>Synology: failed sign-in for $(dstuser) from $(srcip)</description>
+    <description>Synology: failed sign-in for $(dstuser) from $(srcip) via $(service)</description>
     <group>authentication_failed,</group>
   </rule>
   <rule id="127503" level="10" frequency="6" timeframe="120">
@@ -323,7 +382,13 @@ write_rules() {
     <match type="pcre2">User \[(?i:admin|administrator|root)\]</match>
     <description>Synology: built-in admin account sign-in from $(srcip)</description>
   </rule>
+  <!--WATCH_USERS_RULE-->
+  <rule id="127508" level="3">
+    <decoded_as>synology-testlog</decoded_as>
+    <description>Synology: test log received (Log Center, Send test log)</description>
+  </rule>
 
+  <!-- File activity (File Station and SMB transfer logs) -->
   <rule id="127510" level="3">
     <decoded_as>synology-file</decoded_as>
     <description>Synology file $(syno_action): $(file_path) by $(dstuser) from $(srcip)</description>
@@ -338,8 +403,194 @@ write_rules() {
     <same_user />
     <description>Synology: mass deletion by $(dstuser) - possible ransomware or data destruction</description>
   </rule>
+
+  <!-- System: security-relevant changes -->
+  <rule id="127520" level="3">
+    <decoded_as>synology-system</decoded_as>
+    <description>Synology system: $(syno_event) (by $(srcuser))</description>
+  </rule>
+  <rule id="127524" level="10">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">(?i)was added to the group \[administrators\]</match>
+    <description>Synology: user $(syno_object) added to administrators by $(srcuser)</description>
+  </rule>
+  <rule id="127521" level="8">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">User \[[^\]]*\] was created</match>
+    <description>Synology: user $(syno_object) created by $(srcuser)</description>
+  </rule>
+  <rule id="127522" level="8">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">deleted User \[</match>
+    <description>Synology: user $(syno_object) deleted by $(srcuser)</description>
+  </rule>
+  <rule id="127523" level="5">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">User \[[^\]]*\] was disabled</match>
+    <description>Synology: user $(syno_object) disabled by $(srcuser)</description>
+  </rule>
+  <rule id="127525" level="5">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">Password of the user \[</match>
+    <description>Synology: password changed for $(syno_object) by $(srcuser)</description>
+  </rule>
+  <rule id="127526" level="5">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">app privilege</match>
+    <description>Synology: app privilege changed by $(srcuser) - $(syno_event)</description>
+  </rule>
+  <rule id="127527" level="10">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">Log Level\]: \[[^\]]*\] was disabled|\[Enable [^\]]* Log\] was disabled|(?i:transfer log)[^.]*disabled</match>
+    <description>Synology: audit logging reduced by $(srcuser) - $(syno_event)</description>
+  </rule>
+  <rule id="127528" level="10">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">successfully started \[QuickConnect\]</match>
+    <description>Synology: QuickConnect started - DSM may be reachable from the internet</description>
+  </rule>
+  <rule id="127529" level="8">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">(?i)\b(?:SSH|Telnet|FTPS?|SFTP|TFTP|SNMP|rsync|WebDAV)\]? service was started</match>
+    <description>Synology: remote access service started by $(srcuser) - $(syno_event)</description>
+  </rule>
+  <rule id="127530" level="5">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">Scheduled Task \[.*\] was (?:created|removed|renamed)</match>
+    <description>Synology: scheduled task change by $(srcuser) - $(syno_event)</description>
+  </rule>
+  <rule id="127531" level="5">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">Package \[[^\]]*\] has been successfully (?:installed|uninstalled)</match>
+    <description>Synology: package $(syno_object) installed or removed by $(srcuser)</description>
+  </rule>
+  <rule id="127532" level="8">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">^System \S+:\s+(?:\S+ )?shared folder \[[^\]]*\] was (?:deleted|renamed)</match>
+    <description>Synology: shared folder $(syno_object) deleted or renamed by $(srcuser)</description>
+  </rule>
+  <rule id="127533" level="5">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">(?i)empty recycle bin</match>
+    <description>Synology: recycle bin emptied - $(syno_event)</description>
+  </rule>
+  <rule id="127534" level="5">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">(?i)certificate</match>
+    <description>Synology: certificate change by $(srcuser) - $(syno_event)</description>
+  </rule>
+  <rule id="127535" level="5">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">IP of \[|Subnet mask of \[|DNS server setting was changed|Server name was changed</match>
+    <description>Synology: network setting changed by $(srcuser) - $(syno_event)</description>
+  </rule>
+  <rule id="127536" level="8">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">Server date/time was changed|Network time synchronization</match>
+    <description>Synology: time or NTP setting changed by $(srcuser) - $(syno_event)</description>
+  </rule>
+  <rule id="127537" level="5">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">SSL/TLS</match>
+    <description>Synology: SSL/TLS setting changed by $(srcuser) - $(syno_event)</description>
+  </rule>
+  <rule id="127538" level="10">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">(?i)disabled auto block</match>
+    <description>Synology: auto block disabled by $(srcuser)</description>
+  </rule>
+
+  <!-- System: storage, power and hardware -->
+  <rule id="127540" level="12">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">Storage Pool \[[^\]]*\] degraded</match>
+    <description>Synology: storage pool degraded - $(syno_event)</description>
+  </rule>
+  <rule id="127541" level="8">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">has been deactivated</match>
+    <description>Synology: drive deactivated - $(syno_event)</description>
+  </rule>
+  <rule id="127542" level="12">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">reaches hard limit</match>
+    <description>Synology: iSCSI LUN full and read-only - $(syno_event)</description>
+  </rule>
+  <rule id="127543" level="7">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">reaches soft limit</match>
+    <description>Synology: iSCSI LUN nearly full - $(syno_event)</description>
+  </rule>
+  <rule id="127544" level="8">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">low storage space</match>
+    <description>Synology: low storage space - $(syno_event)</description>
+  </rule>
+  <rule id="127545" level="10">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">stopped providing power</match>
+    <description>Synology: power supply failure - $(syno_event)</description>
+  </rule>
+  <rule id="127546" level="5">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">is on battery</match>
+    <description>Synology: running on UPS battery</description>
+  </rule>
+  <rule id="127547" level="8">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">improper shutdown</match>
+    <description>Synology: booted after an improper shutdown</description>
+  </rule>
+  <rule id="127548" level="8">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">IP conflict at</match>
+    <description>Synology: IP address conflict - $(syno_event)</description>
+  </rule>
+  <rule id="127549" level="7">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">Failed to send email</match>
+    <description>Synology: email notification failed - NAS alerts are not being delivered</description>
+  </rule>
+  <rule id="127550" level="5">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">was not ejected properly</match>
+    <description>Synology: external device removed without ejecting - $(syno_object)</description>
+  </rule>
+  <rule id="127551" level="5">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">External disk \[[^\]]*\] is mounted</match>
+    <description>Synology: external disk $(syno_object) connected</description>
+  </rule>
+  <rule id="127552" level="3">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">\] link down\.</match>
+    <description>Synology: network link down on $(syno_object)</description>
+  </rule>
+  <rule id="127553" level="8" frequency="10" timeframe="600">
+    <if_matched_sid>127552</if_matched_sid>
+    <description>Synology: network links flapping - 10 link-down events in 10 minutes</description>
+  </rule>
+  <rule id="127554" level="5">
+    <if_sid>127520</if_sid>
+    <match type="pcre2">counting down to (?:reboot|shutdown)</match>
+    <description>Synology: reboot or shutdown started by $(srcuser)</description>
+  </rule>
 </group>
 XMLEOF
+
+  if [ -n "$WATCH_USERS" ]; then
+    "$PY" - "$RULES_FILE" "$(watch_list | sed 's/\./\\./g' | paste -sd'|' -)" <<'PYEOF'
+import sys
+path, pattern = sys.argv[1], sys.argv[2]
+text = open(path, encoding="utf-8").read()
+rule = ('<rule id="127509" level="10">\n'
+        '    <if_sid>127501</if_sid>\n'
+        '    <match type="pcre2">User \\[(?i:%s)\\] from</match>\n'
+        '    <description>Synology: watched account $(dstuser) signed in from $(srcip)</description>\n'
+        '  </rule>' % pattern)
+open(path, "w", encoding="utf-8").write(text.replace("<!--WATCH_USERS_RULE-->", rule, 1))
+PYEOF
+  fi
 
   if [ "$RULE_BASE" -ne "$DEFAULT_BASE" ]; then
     local off
@@ -356,9 +607,19 @@ self_test_samples() {
 02|Oct  1 16:22:41 NAS01 Connection: User [jdoe] from [203.0.113.25] failed to sign in to [DSM] via [password] due to authorization failure.
 00|Oct  1 16:36:49 NAS01 Connection: User [jdoe] from [203.0.113.25] has successfully passed the first authentication of 2FA via [password]
 01|Oct  1 16:36:55 NAS01 Connection: User [jdoe] from [203.0.113.25] signed in to [DSM] successfully via [password].
+02|Oct  9 08:12:10 NAS01 Connection: User [] from [198.51.100.73] failed to sign in to [DSM] via [password] due to authorization failure.
+06|Jul 31 00:40:02 NAS01 Connection: Host [192.0.2.2] failed to connect via [SMB] due to [SMB1 not permitted].
+06|Oct 20 09:15:00 NAS01 Connection: User [guest] from [192.0.2.48] failed to log in via [SMB] due to [NTLMv1 not permitted].
 10|Oct  1 16:37:11 NAS01 FileStation Event: upload, Path: /Shared/Quarterly report.docx, File/Folder: File, Size: 18.77 KB, User: jdoe, IP: 203.0.113.25
 10|Oct  1 16:37:18 NAS01 FileStation Event: rename, Path: /Shared/Quarterly report.docx -> /Shared/Q3 report.docx, File/Folder: File, Size: 18.77 KB, User: jdoe, IP: 203.0.113.25
 11|Oct  1 16:37:22 NAS01 FileStation Event: delete, Path: /Shared/Q3 report.docx, File/Folder: File, Size: 18.77 KB, User: jdoe, IP: 203.0.113.25
+08|Oct 12 14:30:00 NAS01 System Test message from Synology Syslog Client from (192.0.2.1)
+30|Oct 12 14:33:59 NAS01 System jdoe:	Scheduled Task [wazuh-test] was created.
+20|Oct  1 16:52:34 NAS01 System SYSTEM:	System successfully stopped [QuickConnect].
+24|May  1 09:16:38 NAS01 System jdoe:	User [jdoe2] was added to the group [administrators].
+27|Oct  1 16:25:00 NAS01 System jdoe:	[SMB Log Level]: [read] was disabled
+40|Oct  2 16:54:12 NAS01 System SYSTEM:	Storage Pool [1] degraded [3/4 of drives remaining]. Please repair it.
+42|Aug 12 08:18:59 NAS01 System SYSTEM:	The iSCSI LUN [LUN1,LUN2] reaches hard limit and becomes read-only.
 EOF
 }
 
@@ -488,10 +749,14 @@ do_install() {
   NAS_IP="$(nas_list | paste -sd, -)"
   [[ "$SYSLOG_PORT" =~ ^[0-9]+$ ]] && [ "$SYSLOG_PORT" -ge 1 ] && [ "$SYSLOG_PORT" -le 65535 ] || die "Invalid port: $SYSLOG_PORT"
   [ "$SYSLOG_PROTO" = "tcp" ] || [ "$SYSLOG_PROTO" = "udp" ] || die "Protocol must be tcp or udp."
-  [[ "$RULE_BASE" =~ ^[0-9]+$ ]] && [ "$RULE_BASE" -ge 100000 ] && [ "$RULE_BASE" -le 999987 ] \
-    || die "SynologyRuleBase must be between 100000 and 999987."
+  [[ "$RULE_BASE" =~ ^[0-9]+$ ]] && [ "$RULE_BASE" -ge 100000 ] && [ "$RULE_BASE" -le $((999999 - LAST_OFFSET)) ] \
+    || die "SynologyRuleBase must be between 100000 and $((999999 - LAST_OFFSET))."
+  local u
+  while read -r u; do
+    [[ "$u" =~ ^[A-Za-z0-9._@-]+$ ]] || die "Watched account names may only contain letters, digits and . _ @ - : $u"
+  done < <(watch_list)
 
-  info "NAS: $NAS_IP   listener: $SYSLOG_PORT/$SYSLOG_PROTO   rule IDs: $RULE_BASE-$((RULE_BASE + 12))"
+  info "NAS: $NAS_IP   listener: $SYSLOG_PORT/$SYSLOG_PROTO   rule IDs: $RULE_BASE-$((RULE_BASE + LAST_OFFSET))"
 
   # --- Checks that must pass before anything is written ---------------------
   local other

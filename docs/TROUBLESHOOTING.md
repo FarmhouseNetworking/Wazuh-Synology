@@ -4,6 +4,7 @@ Work down this page in order. Each section says how to tell whether it applies, 
 
 - [Nothing arrives from the NAS](#nothing-arrives-from-the-nas)
 - [Only failed sign-ins arrive](#only-failed-sign-ins-arrive)
+- [A DSM change produced no alert](#a-dsm-change-produced-no-alert)
 - [A log line arrives but no alert appears](#a-log-line-arrives-but-no-alert-appears)
 - [The installer stops: rule ID already used](#the-installer-stops-rule-id-already-used)
 - [The installer stops: listener conflict](#the-installer-stops-listener-conflict)
@@ -43,6 +44,24 @@ A capture filtered with `tcp port 514` will show nothing at all for a NAS that i
 
 ---
 
+## A DSM change produced no alert
+
+**Check DSM first.** Open **Log Center → Logs**, choose the **System** log (it may be labelled General) and look for the change. Not every setting change writes a log entry: for example, toggling Log Center's own archive settings writes nothing.
+
+**Prove the path with a change that always logs.** Start a capture on the manager, then create a disabled scheduled task in **Control Panel → Task Scheduler** and delete it:
+
+```bash
+sudo timeout 300 tcpdump -i any -nn -A -l 'port 514 and host <NAS_IP>' 2>/dev/null | grep -a --line-buffered '<NAS hostname>'
+```
+
+You should see two lines like `System jdoe:<TAB>Scheduled Task [wazuh-test] was created.` and rule 127530 should fire. Use `grep -a`: System lines contain a tab, and the capture can contain bytes that make plain `grep` treat it as binary.
+
+- **Entry in DSM, line on the wire, no alert:** a decoding problem. See the next section.
+- **Entry in DSM, nothing on the wire:** check **Log Filters** has the **System** category and Info priority selected.
+- **No entry in DSM:** that action is not logged by DSM. Nothing on the Wazuh side can fix that.
+
+---
+
 ## A log line arrives but no alert appears
 
 **Check.** Copy the line from the capture, starting at the month (drop the `<14>` priority prefix), and test it:
@@ -66,6 +85,7 @@ Wazuh keeps two lists of decoders: those that declare `<program_name>` and those
 |---|---|---|
 | `NAS01 Connection: User [...]` | `Connection` | declare `<program_name>` |
 | `NAS01 FileStation Event: upload, ...` | none (there is a space before the colon) | **not** declare `<program_name>` |
+| `NAS01 System jdoe:<TAB>Scheduled Task ...` | none (a space follows `System`) | **not** declare `<program_name>` |
 
 A prematch-only decoder for a `Connection:` line passes every syntax check, loads without warnings, and is simply never evaluated.
 

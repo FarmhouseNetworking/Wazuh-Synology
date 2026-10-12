@@ -6,28 +6,43 @@
   Wazuh only tries decoders that declare program_name against such events,
   so synology-conn must declare it.
 
-  FileStation Event lines contain a space before the colon, so Wazuh sets
-  no program_name and only tries decoders without one. synology-file must
-  not declare program_name.
+  FileStation Event, WinFileService Event and System lines have a space
+  where Wazuh looks for the program name, so Wazuh sets no program_name and
+  only tries decoders without one. Those decoders must not declare it.
 -->
 <decoder name="synology-conn">
   <program_name>^Connection$</program_name>
-  <prematch type="pcre2">User \[[^\]]+\] from \[[^\]]+\]|Host \[[^\]]+\] was blocked</prematch>
+  <prematch type="pcre2">User \[[^\]]*\] from \[[^\]]+\]|Host \[[^\]]+\] (?:was blocked|failed to connect)</prematch>
 </decoder>
 <decoder name="synology-conn-fields">
   <parent>synology-conn</parent>
-  <regex type="pcre2">User \[([^\]]+)\] from \[([^\]]+)\]</regex>
+  <regex type="pcre2">User \[([^\]]*)\] from \[(?:[^\]\(]*\()?([^\]\)]+)\)?\]</regex>
   <order>dstuser, srcip</order>
 </decoder>
 <decoder name="synology-conn-fields">
   <parent>synology-conn</parent>
-  <regex type="pcre2">Host \[([^\]]+)\] was blocked</regex>
+  <regex type="pcre2">from \[([^\]\(]+)\(</regex>
+  <order>src_hostname</order>
+</decoder>
+<decoder name="synology-conn-fields">
+  <parent>synology-conn</parent>
+  <regex type="pcre2">Host \[([^\]]+)\] (?:was blocked|failed to connect)</regex>
   <order>srcip</order>
 </decoder>
 <decoder name="synology-conn-fields">
   <parent>synology-conn</parent>
   <regex type="pcre2">(?:via|to) \[([^\]]+)\]</regex>
   <order>service</order>
+</decoder>
+<decoder name="synology-conn-fields">
+  <parent>synology-conn</parent>
+  <regex type="pcre2">due to \[([^\]]+)\]</regex>
+  <order>syno_reason</order>
+</decoder>
+<decoder name="synology-conn-fields">
+  <parent>synology-conn</parent>
+  <regex type="pcre2">accessed shared folder \[([^\]]+)\]</regex>
+  <order>syno_share</order>
 </decoder>
 
 <decoder name="synology-file">
@@ -37,4 +52,22 @@
   <parent>synology-file</parent>
   <regex type="pcre2">(\w+), Path: (.+?), File/Folder: (\w+), Size: (.+?), User: (.+?), IP: (\S+)</regex>
   <order>syno_action, file_path, file_type, file_size, dstuser, srcip</order>
+</decoder>
+
+<decoder name="synology-system">
+  <prematch type="pcre2">^System \S+:\s</prematch>
+</decoder>
+<decoder name="synology-system-fields">
+  <parent>synology-system</parent>
+  <regex type="pcre2">^System (\S+):\s+(.+?)\s*$</regex>
+  <order>srcuser, syno_event</order>
+</decoder>
+<decoder name="synology-system-fields">
+  <parent>synology-system</parent>
+  <regex type="pcre2">:\s+[^\[]*\[([^\]]*)\]</regex>
+  <order>syno_object</order>
+</decoder>
+
+<decoder name="synology-testlog">
+  <prematch type="pcre2">^System Test message from Synology Syslog Client</prematch>
 </decoder>
