@@ -4,6 +4,7 @@ Work down this page in order. Each section says how to tell whether it applies, 
 
 - [Nothing arrives from the NAS](#nothing-arrives-from-the-nas)
 - [Only failed sign-ins arrive](#only-failed-sign-ins-arrive)
+- [Active Backup lines show in a capture but never alert](#active-backup-lines-show-in-a-capture-but-never-alert)
 - [A DSM change produced no alert](#a-dsm-change-produced-no-alert)
 - [A log line arrives but no alert appears](#a-log-line-arrives-but-no-alert-appears)
 - [The installer stops: rule ID already used](#the-installer-stops-rule-id-already-used)
@@ -41,6 +42,16 @@ A capture filtered with `tcp port 514` will show nothing at all for a NAS that i
 **Fix.** Select all priorities from Info to Emergency, tick the categories you want, and click Apply.
 
 **How to tell DSM is not sending, rather than Wazuh not decoding.** Run the capture above while signing in successfully. If no packet appears, the NAS did not send it and no change on the manager will help.
+
+---
+
+## Active Backup lines show in a capture but never alert
+
+**Cause.** Active Backup for Business has its own syslog client, set in **Active Backup for Business → Log → Settings → Log Forwarding**, with its own transfer protocol. If that is UDP and the Wazuh listener is TCP, `tcpdump` on the manager still shows every line, because it sees packets before any program does. Wazuh never receives them, because nothing listens on UDP 514.
+
+**Check.** `sudo ss -lnu | grep ':514 '` prints nothing when there is no UDP listener.
+
+**Fix.** Set Active Backup's transfer protocol to TCP, click **Send Test Log**, and look for rule 127555.
 
 ---
 

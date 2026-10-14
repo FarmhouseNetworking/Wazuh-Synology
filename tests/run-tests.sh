@@ -105,7 +105,7 @@ check "decoder and rule files removed"       no_files
 echo "Custom rule base"
 check "installer exits 0 with --rule-base"   run "${INSTALL[@]}" --rule-base 130000
 check "rules renumbered"                     grep -q 'id="130012"' "$T/etc/rules/9999_synology_rules.xml"
-check "no default IDs left behind"           bash -c "! grep -q '1275[0-5][0-9]' '$T/etc/rules/9999_synology_rules.xml'"
+check "no default IDs left behind"           bash -c "! grep -q '1275[0-6][0-9]' '$T/etc/rules/9999_synology_rules.xml'"
 check "renumbered self-test passed"          out_has 'Self-test passed'
 
 echo "Watched accounts"

@@ -6,6 +6,9 @@
   Wazuh only tries decoders that declare program_name against such events,
   so synology-conn must declare it.
 
+  ActiveBackup[pid] and Hyper_Backup lines also get a program_name, so
+  their decoders declare it too.
+
   FileStation Event, WinFileService Event and System lines have a space
   where Wazuh looks for the program name, so Wazuh sets no program_name and
   only tries decoders without one. Those decoders must not declare it.
@@ -70,4 +73,37 @@
 
 <decoder name="synology-testlog">
   <prematch type="pcre2">^System Test message from Synology Syslog Client</prematch>
+</decoder>
+
+<decoder name="synology-abb">
+  <program_name>^ActiveBackup$</program_name>
+</decoder>
+<decoder name="synology-abb-fields">
+  <parent>synology-abb</parent>
+  <regex type="pcre2">^\[([^\]]+)\]\s+(.+?)\s*$</regex>
+  <order>syno_task, syno_event</order>
+</decoder>
+<decoder name="synology-abb-fields">
+  <parent>synology-abb</parent>
+  <regex type="pcre2">(?:VM|virtual machine) \[?([A-Za-z0-9._-]+)</regex>
+  <order>syno_vm</order>
+</decoder>
+
+<decoder name="synology-hyperbackup">
+  <program_name>^Hyper_Backup$</program_name>
+</decoder>
+<decoder name="synology-hyperbackup-fields">
+  <parent>synology-hyperbackup</parent>
+  <regex type="pcre2">^(\S+):\s+(.+?)\s*$</regex>
+  <order>srcuser, syno_event</order>
+</decoder>
+<decoder name="synology-hyperbackup-fields">
+  <parent>synology-hyperbackup</parent>
+  <regex type="pcre2">\]\[([^\]]+)\]</regex>
+  <order>syno_task</order>
+</decoder>
+<decoder name="synology-hyperbackup-fields">
+  <parent>synology-hyperbackup</parent>
+  <regex type="pcre2">backup task \[([^\]]+)\]</regex>
+  <order>syno_task</order>
 </decoder>

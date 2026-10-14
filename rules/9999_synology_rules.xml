@@ -2,8 +2,7 @@
   Synology DSM 7.x rules
   https://github.com/FarmhouseNetworking/Wazuh-Synology
 
-  IDs 127500-127554 by default (the installer renumbers with RULE_BASE).
-  The ten IDs after the last one are reserved for backup job rules.
+  IDs 127500-127564 by default (the installer renumbers with RULE_BASE).
   action and dstuser are static Wazuh fields and cannot be matched with a
   field element, which is why the decoders emit syno_action and the rules
   match on the log text.
@@ -249,5 +248,67 @@
     <if_sid>127520</if_sid>
     <match type="pcre2">counting down to (?:reboot|shutdown)</match>
     <description>Synology: reboot or shutdown started by $(srcuser)</description>
+  </rule>
+
+  <!-- Active Backup for Business (its own Log Forwarding setting) -->
+  <rule id="127555" level="3">
+    <decoded_as>synology-abb</decoded_as>
+    <description>Active Backup: $(syno_task) - $(syno_event)</description>
+    <group>backup,</group>
+  </rule>
+  <rule id="127559" level="10">
+    <if_sid>127555</if_sid>
+    <match type="pcre2">(?i)\b(?:was cancell?ed|failed|failure|error|aborted|partially completed|skipped)\b</match>
+    <description>Active Backup: task $(syno_task) did not complete - $(syno_event)</description>
+    <group>backup,backup_failure,</group>
+  </rule>
+  <rule id="127556" level="3">
+    <if_sid>127555</if_sid>
+    <match type="pcre2">The backup task .* has started</match>
+    <description>Active Backup: task $(syno_task) started</description>
+    <group>backup,</group>
+  </rule>
+  <rule id="127557" level="3">
+    <if_sid>127555</if_sid>
+    <match type="pcre2">The backup task .* was completed</match>
+    <description>Active Backup: task $(syno_task) completed</description>
+    <group>backup,backup_success,</group>
+  </rule>
+  <rule id="127558" level="3">
+    <if_sid>127555</if_sid>
+    <match type="pcre2">was successfully backed up</match>
+    <description>Active Backup: $(syno_vm) backed up successfully ($(syno_task))</description>
+    <group>backup,</group>
+  </rule>
+
+  <!-- Hyper Backup (Log Center: Hyper Backup / Backup categories) -->
+  <rule id="127560" level="3">
+    <decoded_as>synology-hyperbackup</decoded_as>
+    <description>Hyper Backup: $(syno_event)</description>
+    <group>backup,</group>
+  </rule>
+  <rule id="127564" level="10">
+    <if_sid>127560</if_sid>
+    <match type="pcre2">Failed to access the backup destination|Exception occurred while backing up data|Backup task was cancell?ed|suspension incomplete|Destination is busy|has been skipped|Failed to start backup task(?!\. \(The backup destination does not exist)|(?i:integrity check)[^.]*\b(?:failed|corrupt)</match>
+    <description>Hyper Backup: task $(syno_task) failed - $(syno_event)</description>
+    <group>backup,backup_failure,</group>
+  </rule>
+  <rule id="127563" level="5">
+    <if_sid>127560</if_sid>
+    <match type="pcre2">Failed to (?:run|start) backup task</match>
+    <description>Hyper Backup: task $(syno_task) did not run - $(syno_event)</description>
+    <group>backup,</group>
+  </rule>
+  <rule id="127562" level="3">
+    <if_sid>127560</if_sid>
+    <match type="pcre2">Backup task finished successfully</match>
+    <description>Hyper Backup: task $(syno_task) finished successfully</description>
+    <group>backup,backup_success,</group>
+  </rule>
+  <rule id="127561" level="3">
+    <if_sid>127560</if_sid>
+    <match type="pcre2">Backup task started|Started to resume backup task</match>
+    <description>Hyper Backup: task $(syno_task) started by $(srcuser)</description>
+    <group>backup,</group>
   </rule>
 </group>

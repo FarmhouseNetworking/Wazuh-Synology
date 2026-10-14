@@ -23,13 +23,13 @@
 
 set -uo pipefail
 
-SCRIPT_VERSION="1.2.0"
+SCRIPT_VERSION="1.3.0"
 
 # ----------------------------- CONFIGURATION ---------------------------------
 NAS_IP="${NAS_IP:-}"                      # NAS address(es), comma-separated, IPv4 or IPv4/CIDR
 SYSLOG_PORT="${SYSLOG_PORT:-514}"         # Port the manager listens on for the NAS
 SYSLOG_PROTO="${SYSLOG_PROTO:-tcp}"       # tcp | udp  (must match DSM's "Transfer protocol")
-RULE_BASE="${RULE_BASE:-127500}"          # First rule ID; the ruleset uses RULE_BASE..RULE_BASE+54
+RULE_BASE="${RULE_BASE:-127500}"          # First rule ID; the ruleset uses RULE_BASE..RULE_BASE+64
 WATCH_USERS="${WATCH_USERS:-}"            # Accounts whose every sign-in alerts (e.g. break-glass), comma-separated
 ADD_LISTENER="${ADD_LISTENER:-yes}"       # yes | no  (no = you added the NAS to an existing <remote> block)
 OPEN_FIREWALL="${OPEN_FIREWALL:-yes}"     # yes | no  (ufw / firewalld, NAS source only)
@@ -47,8 +47,8 @@ BACKUP_ROOT="${BACKUP_ROOT:-/root}"
 MARK_BEGIN="<!-- BEGIN synology-wazuh-install listener -->"
 MARK_END="<!-- END synology-wazuh-install listener -->"
 DEFAULT_BASE=127500
-RULE_OFFSETS="00 01 02 03 04 05 06 07 08 09 10 11 12 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54"
-LAST_OFFSET=54
+RULE_OFFSETS="00 01 02 03 04 05 06 07 08 09 10 11 12 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64"
+LAST_OFFSET=64
 
 BACKUP_DIR=""
 HAD_DEC=0
@@ -224,6 +224,9 @@ write_decoders() {
   Wazuh only tries decoders that declare program_name against such events,
   so synology-conn must declare it.
 
+  ActiveBackup[pid] and Hyper_Backup lines also get a program_name, so
+  their decoders declare it too.
+
   FileStation Event, WinFileService Event and System lines have a space
   where Wazuh looks for the program name, so Wazuh sets no program_name and
   only tries decoders without one. Those decoders must not declare it.
@@ -289,6 +292,39 @@ write_decoders() {
 <decoder name="synology-testlog">
   <prematch type="pcre2">^System Test message from Synology Syslog Client</prematch>
 </decoder>
+
+<decoder name="synology-abb">
+  <program_name>^ActiveBackup$</program_name>
+</decoder>
+<decoder name="synology-abb-fields">
+  <parent>synology-abb</parent>
+  <regex type="pcre2">^\[([^\]]+)\]\s+(.+?)\s*$</regex>
+  <order>syno_task, syno_event</order>
+</decoder>
+<decoder name="synology-abb-fields">
+  <parent>synology-abb</parent>
+  <regex type="pcre2">(?:VM|virtual machine) \[?([A-Za-z0-9._-]+)</regex>
+  <order>syno_vm</order>
+</decoder>
+
+<decoder name="synology-hyperbackup">
+  <program_name>^Hyper_Backup$</program_name>
+</decoder>
+<decoder name="synology-hyperbackup-fields">
+  <parent>synology-hyperbackup</parent>
+  <regex type="pcre2">^(\S+):\s+(.+?)\s*$</regex>
+  <order>srcuser, syno_event</order>
+</decoder>
+<decoder name="synology-hyperbackup-fields">
+  <parent>synology-hyperbackup</parent>
+  <regex type="pcre2">\]\[([^\]]+)\]</regex>
+  <order>syno_task</order>
+</decoder>
+<decoder name="synology-hyperbackup-fields">
+  <parent>synology-hyperbackup</parent>
+  <regex type="pcre2">backup task \[([^\]]+)\]</regex>
+  <order>syno_task</order>
+</decoder>
 XMLEOF
 }
 
@@ -298,8 +334,7 @@ write_rules() {
   Synology DSM 7.x rules
   https://github.com/FarmhouseNetworking/Wazuh-Synology
 
-  IDs 127500-127554 by default (the installer renumbers with RULE_BASE).
-  The ten IDs after the last one are reserved for backup job rules.
+  IDs 127500-127564 by default (the installer renumbers with RULE_BASE).
   action and dstuser are static Wazuh fields and cannot be matched with a
   field element, which is why the decoders emit syno_action and the rules
   match on the log text.
@@ -546,6 +581,68 @@ write_rules() {
     <match type="pcre2">counting down to (?:reboot|shutdown)</match>
     <description>Synology: reboot or shutdown started by $(srcuser)</description>
   </rule>
+
+  <!-- Active Backup for Business (its own Log Forwarding setting) -->
+  <rule id="127555" level="3">
+    <decoded_as>synology-abb</decoded_as>
+    <description>Active Backup: $(syno_task) - $(syno_event)</description>
+    <group>backup,</group>
+  </rule>
+  <rule id="127559" level="10">
+    <if_sid>127555</if_sid>
+    <match type="pcre2">(?i)\b(?:was cancell?ed|failed|failure|error|aborted|partially completed|skipped)\b</match>
+    <description>Active Backup: task $(syno_task) did not complete - $(syno_event)</description>
+    <group>backup,backup_failure,</group>
+  </rule>
+  <rule id="127556" level="3">
+    <if_sid>127555</if_sid>
+    <match type="pcre2">The backup task .* has started</match>
+    <description>Active Backup: task $(syno_task) started</description>
+    <group>backup,</group>
+  </rule>
+  <rule id="127557" level="3">
+    <if_sid>127555</if_sid>
+    <match type="pcre2">The backup task .* was completed</match>
+    <description>Active Backup: task $(syno_task) completed</description>
+    <group>backup,backup_success,</group>
+  </rule>
+  <rule id="127558" level="3">
+    <if_sid>127555</if_sid>
+    <match type="pcre2">was successfully backed up</match>
+    <description>Active Backup: $(syno_vm) backed up successfully ($(syno_task))</description>
+    <group>backup,</group>
+  </rule>
+
+  <!-- Hyper Backup (Log Center: Hyper Backup / Backup categories) -->
+  <rule id="127560" level="3">
+    <decoded_as>synology-hyperbackup</decoded_as>
+    <description>Hyper Backup: $(syno_event)</description>
+    <group>backup,</group>
+  </rule>
+  <rule id="127564" level="10">
+    <if_sid>127560</if_sid>
+    <match type="pcre2">Failed to access the backup destination|Exception occurred while backing up data|Backup task was cancell?ed|suspension incomplete|Destination is busy|has been skipped|Failed to start backup task(?!\. \(The backup destination does not exist)|(?i:integrity check)[^.]*\b(?:failed|corrupt)</match>
+    <description>Hyper Backup: task $(syno_task) failed - $(syno_event)</description>
+    <group>backup,backup_failure,</group>
+  </rule>
+  <rule id="127563" level="5">
+    <if_sid>127560</if_sid>
+    <match type="pcre2">Failed to (?:run|start) backup task</match>
+    <description>Hyper Backup: task $(syno_task) did not run - $(syno_event)</description>
+    <group>backup,</group>
+  </rule>
+  <rule id="127562" level="3">
+    <if_sid>127560</if_sid>
+    <match type="pcre2">Backup task finished successfully</match>
+    <description>Hyper Backup: task $(syno_task) finished successfully</description>
+    <group>backup,backup_success,</group>
+  </rule>
+  <rule id="127561" level="3">
+    <if_sid>127560</if_sid>
+    <match type="pcre2">Backup task started|Started to resume backup task</match>
+    <description>Hyper Backup: task $(syno_task) started by $(srcuser)</description>
+    <group>backup,</group>
+  </rule>
 </group>
 XMLEOF
 
@@ -591,6 +688,13 @@ self_test_samples() {
 27|Oct  1 16:25:00 NAS01 System jdoe:	[SMB Log Level]: [read] was disabled
 40|Oct  2 16:54:12 NAS01 System SYSTEM:	Storage Pool [1] degraded [3/4 of drives remaining]. Please repair it.
 42|Aug 12 08:18:59 NAS01 System SYSTEM:	The iSCSI LUN [LUN1,LUN2] reaches hard limit and becomes read-only.
+56|Oct 14 10:58:43 NAS01 ActiveBackup[9899]: [VM Backup] The backup task VM Backup has started.
+58|Oct 14 11:04:18 NAS01 ActiveBackup[9899]: [VM Backup] The VM VM01 was successfully backed up.
+59|Oct 14 11:26:28 NAS01 ActiveBackup[9899]: [VM Backup] The backup task VM Backup was canceled.
+61|Oct 14 11:08:29 NAS01 Hyper_Backup: jdoe:	[Local][Local Storage 1] Backup task started.
+62|Oct 12 03:05:20 NAS01 Hyper_Backup: SYSTEM:	[Local][Local Storage 2] Backup task finished successfully. [754487 files scanned] [191 new files] [115 files modified] [754181 files unchanged]
+63|Oct 14 03:00:03 NAS01 Hyper_Backup: SYSTEM:	[Local][Local Storage 1] Failed to start backup task. (The backup destination does not exist.) [Path: usbshare1]
+64|Oct 14 11:25:37 NAS01 Hyper_Backup: jdoe:	[Local][Local Storage 1] Backup task was cancelled.
 EOF
 }
 

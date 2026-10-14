@@ -65,3 +65,33 @@
 127536|Sep 19 14:35:57 NAS01 System jdoe:	Server date/time was changed to [2026/09/19 14:35:57] from [2026/09/19 14:30:36].
 127537|Sep 20 17:21:25 NAS01 System jdoe:	System successfully set [Allowing SSL/TLS connection] to [Disabled].
 127527|Sep 20 16:55:55 NAS01 System jdoe:	[Enable SMB Log] was disabled.
+#
+# Active Backup for Business: captured on the wire (its own Log Forwarding setting)
+127555|Oct 14 10:56:53 NAS01 ActiveBackup[9029]: Test message from Synology Syslog Client from (192.0.2.90)
+127556|Oct 14 10:58:43 NAS01 ActiveBackup[9899]: [VM Backup] The backup task VM Backup has started.
+127555|Oct 14 10:58:44 NAS01 ActiveBackup[9899]: [VM Backup] Starting to back up the VM VM01.
+127555|Oct 14 11:03:26 NAS01 ActiveBackup[9899]: [VM Backup] Disk [vm01.vhdx]: transfer size [4.0 GB], transfer speed [452.00 MB/s].
+127555|Oct 14 11:04:18 NAS01 ActiveBackup[9899]: [VM Backup] Virtual machine VM01 average backup speed: 32.00 MB/s. Operating module loadings: source data read [High], source data transfer [Low], data deduplication [Very high] , compression at destination [Low] , encryption at destination [Low], and write to file [Low].
+127558|Oct 14 11:04:18 NAS01 ActiveBackup[9899]: [VM Backup] The VM VM01 was successfully backed up.
+127557|Oct 14 11:09:24 NAS01 ActiveBackup[9899]: [VM Backup] The backup task VM Backup was completed.
+127559|Oct 14 11:26:25 NAS01 ActiveBackup[9899]: [VM Backup] The backup task of the VM VM01 was canceled.
+127559|Oct 14 11:26:28 NAS01 ActiveBackup[9899]: [VM Backup] The backup task VM Backup was canceled.
+#
+# Hyper Backup: captured on the wire
+127561|Oct 14 11:08:29 NAS01 Hyper_Backup: jdoe:	[Local][Local Storage 1] Backup task started.
+127564|Oct 14 11:25:32 NAS01 Hyper_Backup: jdoe:	[Local][Local Storage 1] Exception occurred while backing up data. (The backup task was cancelled.)
+127564|Oct 14 11:25:37 NAS01 Hyper_Backup: jdoe:	[Local][Local Storage 1] Backup task was cancelled.
+# Hyper Backup: message text from a DSM 7 Log Center export, in the wire format above
+127562|Oct 12 03:05:20 NAS01 Hyper_Backup: SYSTEM:	[Local][Local Storage 2] Backup task finished successfully. [754487 files scanned] [191 new files] [115 files modified] [754181 files unchanged]
+127563|Oct 14 03:00:03 NAS01 Hyper_Backup: SYSTEM:	[Local][Local Storage 1] Failed to start backup task. (The backup destination does not exist.) [Path: usbshare1]
+127563|Oct 14 03:00:03 NAS01 Hyper_Backup: SYSTEM:	[Local][Local Storage 1] Failed to run backup task.
+127564|Oct 12 03:05:24 NAS01 Hyper_Backup: SYSTEM:	[Local][Local Storage 1] Failed to start backup task. (The destination file does not exist. please make sure that no other application is able to write the backup destination.) [Path: /volumeUSB1/usbshare/NAS01_1.hbk/Config/version]
+127564|Sep  3 03:17:40 NAS01 Hyper_Backup: SYSTEM:	[Local][Local Storage 2] Failed to access the backup destination. (Corresponding target [NAS01_1.hbk] in backup destination [usbshare1] is not created by this task. One task is only allowed to link the same target. Please create a new task.)
+127564|Jul 26 03:12:09 NAS01 Hyper_Backup: SYSTEM:	[Local][Local Storage 2] Destination is busy deleting backup versions. Please try again later.
+127564|Sep  5 03:00:02 NAS01 Hyper_Backup: SYSTEM:	Scheduled backup has been skipped because it collides an undergoing backup task. please re-arrange the backup schedule to avoid collisions.
+127564|Oct  8 20:12:13 NAS01 Hyper_Backup: SYSTEM:	[Local][Local Storage 2] Backup task was suspended (suspension incomplete).
+127560|Oct 11 06:05:26 NAS01 Hyper_Backup: SYSTEM:	[Local][Local Storage 2] Backup integrity check is finished. No error was found.
+127560|Oct 11 05:30:18 NAS01 Hyper_Backup: SYSTEM:	[Local][Local Storage 2] Data integrity check finished. 188.2 GB data checked this time, accounting for 7.6% of the total data (2470.8 GB data in total, 47.8% checked already).
+127560|Oct 12 03:05:24 NAS01 Hyper_Backup: admin:	[usbshare1] Version rotation started from ID [Local Storage 2.hbk].
+127560|Sep  3 10:08:00 NAS01 Hyper_Backup: jdoe:	Setting of backup task [Local Storage 2] was created to backup to [usbshare1/Local Storage 2.hbk]
+127561|Oct  9 08:24:22 NAS01 Hyper_Backup: SYSTEM:	[Local][Local Storage 1] Started to resume backup task.

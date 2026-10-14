@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.0 - 2026-10-14
+
+- **Backup job logging.** New decoders for Active Backup for Business (`ActiveBackup[pid]:`) and Hyper Backup (`Hyper_Backup:`) lines, which carry a Wazuh program name and so were not picked up by the System decoder. Rules 127555-127564 cover task start, completion, per-VM success, cancellation and failure. All are in the `backup` group, with `backup_success` / `backup_failure` where they apply.
+- Hyper Backup "destination does not exist" failures are level 5 (127563) rather than 10, so a routinely rotated-out USB drive does not raise a high alert every night. Every other Hyper Backup failure is level 10 (127564).
+- README documents Active Backup for Business's own Log Forwarding setting, which must use the same protocol as the listener.
+- The logtest self-test now covers 23 lines; `tests/sample-logs.txt` holds 78.
+- The rule range is now 127500-127564.
+
 ## 1.2.0 - 2026-10-12
 
 - **New System decoder.** DSM System events (`System <user>:<TAB><message>`) were previously dropped. They now decode, with 33 new rules (127520-127554) for account, privilege, logging, remote-access, network, time, package, shared folder, storage, power and hardware events. Every System event is kept at level 3 at minimum.

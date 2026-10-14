@@ -1,6 +1,6 @@
 # Wazuh-Synology
 
-Send **Synology DSM** sign-in, file activity, system change, storage and hardware logs into a **self-hosted Wazuh manager** with one script. The script adds a syslog listener that only accepts the NAS, installs decoders and rules written against real DSM 7 log lines, and proves them with `wazuh-logtest` before it restarts anything.
+Send **Synology DSM** sign-in, file activity, system change, storage, hardware and **backup job** logs (Active Backup for Business and Hyper Backup) into a **self-hosted Wazuh manager** with one script. The script adds a syslog listener that only accepts the NAS, installs decoders and rules written against real DSM 7 log lines, and proves them with `wazuh-logtest` before it restarts anything.
 
 Wazuh does not ship Synology decoders, so without this the NAS's syslog arrives and is silently dropped as "no decoder matched".
 
@@ -65,7 +65,7 @@ Replace `192.0.2.10` with your NAS's address. For more than one NAS, separate th
 | `--nas-ip LIST` | (required) | NAS address or addresses, IPv4 or IPv4/CIDR, comma-separated |
 | `--port N` | `514` | Port the manager listens on |
 | `--protocol P` | `tcp` | `tcp` or `udp`. Must match the NAS's **Transfer protocol** |
-| `--rule-base N` | `127500` | First rule ID. The ruleset uses `N` to `N+54`; keep `N+55` to `N+64` free for future backup rules |
+| `--rule-base N` | `127500` | First rule ID. The ruleset uses `N` to `N+64` |
 | `--watch-users LIST` | | Accounts whose every successful sign-in raises a level 10 alert, comma-separated. Use it for break-glass or emergency accounts |
 | `--no-listener` | | Do not add a `<remote>` block. Use when the NAS is already allowed in an existing syslog listener |
 | `--no-firewall` | | Leave ufw / firewalld alone |
@@ -120,6 +120,22 @@ Tip: after the NAS is configured, run the script again with `SynologyAction` set
 
 - Tick the categories you want: at least **Connection**, **SMB** and **File Station log**.
 - Set priorities to include **Info** and **Notice**. Successful sign-ins and file events are sent at Info priority. Without it, only failed sign-ins reach Wazuh.
+
+**Active Backup for Business → Log → Settings → Log Forwarding** (only if you use Active Backup for Business)
+
+Active Backup for Business does not go through Log Center. It has its own syslog client, set separately:
+
+| Setting | Value |
+|---|---|
+| Send logs to a syslog server | Ticked |
+| Server | The Wazuh manager's IP |
+| Port | `514` |
+| Transfer protocol | **TCP**, the same as Log Center. If it is left on UDP, a capture on the manager shows the lines arriving, but Wazuh never receives them, because nothing listens on UDP 514 |
+| Log messages format | BSD (RFC 3164) |
+
+Click **Send Test Log**, then OK.
+
+Hyper Backup needs no extra setting: its job results go through Log Center's **Hyper Backup** category.
 
 **Control Panel → File Services → SMB**
 
@@ -233,7 +249,26 @@ Fields extracted:
 
 Level 3 is Wazuh's default alert threshold, so every sign-in, file event and System event is kept as an audit record. On a busy file server that is a lot of alerts: check your retention and disk space, and think before enabling `read` events in DSM's transfer log settings.
 
-**Not covered yet:** backup job results (Hyper Backup, Active Backup for Business, snapshots). Their System lines still arrive as 127520, so they are kept, but they have no dedicated success or failure rules until real lines have been captured.
+**Backup jobs**
+
+| ID | Level | Fires on | Evidence |
+|---|---|---|---|
+| 127555 | 3 | Any Active Backup for Business line not matched below (per-VM progress, transfer sizes, test log) | Wire |
+| 127556 | 3 | Active Backup task started | Wire |
+| 127557 | 3 | Active Backup task completed | Wire |
+| 127558 | 3 | A VM backed up successfully | Wire |
+| 127559 | 10 | Active Backup task or VM cancelled, failed or partially completed | Wire (cancel); failure wording not yet seen |
+| 127560 | 3 | Any Hyper Backup line not matched below (integrity checks, version rotation, task settings) | Export |
+| 127561 | 3 | Hyper Backup task started or resumed | Wire |
+| 127562 | 3 | Hyper Backup task finished successfully | Export |
+| 127563 | 5 | Hyper Backup task did not run because its destination is missing (for example the USB drive for that task is not attached) | Export |
+| 127564 | 10 | Hyper Backup task failed for any other reason, was cancelled or suspended, or was skipped | Wire and export |
+
+127563 is kept at level 5 on purpose. With two Hyper Backup tasks rotating between two USB drives, the task whose drive is away fails every night with "destination does not exist". That is expected. The failure that matters is no task succeeding at all, and Wazuh rules cannot alert on something not happening: check for it in a scheduled report (no 127562 in the last 26 hours) instead.
+
+Fields: Active Backup gives `syno_task`, `syno_event` and `syno_vm`; Hyper Backup gives `srcuser`, `syno_task` and `syno_event`. All backup rules are in the `backup` group, with `backup_success` and `backup_failure` added where they apply.
+
+**Not covered:** Snapshot Replication. Its logs did not reach syslog in testing, and no Synology setting to send them has been found. See [Limitations](#limitations).
 
 ---
 
@@ -257,7 +292,8 @@ These are real lines captured from a DSM 7 NAS, with the hostname, user and addr
 ## Limitations
 
 - **Some formats come from published samples only.** SMB file events (`WinFileService Event: ...`) and SMB share access lines match published DSM 7.0 samples, but had not been captured from a tested NAS when this was published. The "Evidence" column in [Rules](#rules) shows which. If a line does not decode, see [Troubleshooting](docs/TROUBLESHOOTING.md#a-log-line-arrives-but-no-alert-appears) and please open an issue with a sample line.
-- **Backup job results have no dedicated rules yet.** See [Rules](#rules).
+- **Snapshot Replication logs are not sent.** Nothing arrived from Snapshot Replication during testing, and the only published report found (SynoForum, DSM 7.0) says its logs reach neither Log Center nor a remote syslog server. If snapshots are part of your backup evidence, you need another source for them.
+- **Active Backup for Business sends some lines twice.** In testing, task and VM start and finish lines arrived twice and progress lines once. The rules fire on each copy, so counts of those alerts are doubled.
 - **No TLS.** Wazuh's built-in syslog listener does not accept TLS, so the NAS's logs cross the network in plain text, including file paths and usernames. Keep the NAS and the manager on a trusted internal network. If you need encryption in transit, put an rsyslog TLS listener in front and have Wazuh read the file it writes.
 - **IPv4 only** for the NAS address.
 - **Timestamps.** BSD syslog carries no time zone. Wazuh stamps each alert with its own receive time, so alerts are correct, but the timestamp inside the raw log line is the NAS's local time.
@@ -304,6 +340,7 @@ Each of these cost time while building this. Details and fixes are in [docs/TROU
 6. **Rule IDs collide across integrations.** Check before you write.
 7. **Wazuh tries a parent's children highest level first, not in file order.** Two children at the same level are tried in file order. A rule meant to pre-empt another must be at a higher level, or at the same level and earlier in the file.
 8. **Not every DSM setting change writes a log entry.** Check DSM's local Log Center before assuming forwarding is broken.
+9. **Active Backup for Business has its own syslog setting.** It does not use Log Center, and it has its own TCP/UDP choice that must match the listener.
 
 ---
 

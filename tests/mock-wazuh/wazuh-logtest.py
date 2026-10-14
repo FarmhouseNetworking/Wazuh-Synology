@@ -17,7 +17,11 @@ def predecode(line):
     i = 0
     while i < len(rest) and VALID.match(rest[i]): i += 1
     if i < len(rest) and rest[i] == ":":
-        return rest[:i], rest[i+1:].lstrip(" ") if rest[i+1:i+2] == " " else rest[i+1:]
+        return rest[:i], rest[i+2:] if rest[i+1:i+2] == " " else rest[i+1:]
+    # p_name[pid]: (cleanevent.c, second format)
+    m = re.match(r"\[(\d+)\]:( ?)", rest[i:])
+    if m:
+        return rest[:i], rest[i + m.end():]
     return None, rest
 for line in sys.stdin:
     line = line.rstrip("\n")
