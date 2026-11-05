@@ -2,7 +2,7 @@
   Synology DSM 7.x rules
   https://github.com/FarmhouseNetworking/Wazuh-Synology
 
-  IDs 127500-127564 by default (the installer renumbers with RULE_BASE).
+  IDs 127500-127565 by default (the installer renumbers with RULE_BASE).
   action and dstuser are static Wazuh fields and cannot be matched with a
   field element, which is why the decoders emit syno_action and the rules
   match on the log text.
@@ -261,6 +261,19 @@
     <match type="pcre2">(?i)\b(?:was cancell?ed|failed|failure|error|aborted|partially completed|skipped)\b</match>
     <description>Active Backup: task $(syno_task) did not complete - $(syno_event)</description>
     <group>backup,backup_failure,</group>
+  </rule>
+  <!-- 127565 is a child of 127559 on purpose. Wazuh tries a parent's children from the
+       highest level down, so a level 4 sibling of 127559 would never be reached: 127559
+       (level 10) matches the same line first. As a child it lowers the alert only for
+       Active Backup's "CBT failed, so a full backup will be performed" fallback, and only
+       when that sentence is the whole message. The backup then goes on and succeeds
+       (127558/127557). Any other failure line, including one that merely mentions CBT,
+       stays at 127559. -->
+  <rule id="127565" level="4">
+    <if_sid>127559</if_sid>
+    <match type="pcre2">Failed to retrieve the changed blocks \(CBT\) for virtual machine [^\r\n]+?\. A full backup will be performed\.\s*$</match>
+    <description>Active Backup: task $(syno_task) could not read changed blocks (CBT), full backup will be performed - $(syno_event)</description>
+    <group>backup,</group>
   </rule>
   <rule id="127556" level="3">
     <if_sid>127555</if_sid>

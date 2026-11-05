@@ -25,7 +25,7 @@
 set -uo pipefail
 exec 2>&1
 
-SCRIPT_VERSION="1.3.0"
+SCRIPT_VERSION="1.3.1"
 
 # ------------------- SUPEROPS RUNTIME VARIABLES ------------------------------
 # Create these as Runtime Variables on the SuperOps script (names must match).
@@ -75,8 +75,8 @@ BACKUP_ROOT="${BACKUP_ROOT:-/root}"
 MARK_BEGIN="<!-- BEGIN synology-wazuh-install listener -->"
 MARK_END="<!-- END synology-wazuh-install listener -->"
 DEFAULT_BASE=127500
-RULE_OFFSETS="00 01 02 03 04 05 06 07 08 09 10 11 12 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64"
-LAST_OFFSET=64
+RULE_OFFSETS="00 01 02 03 04 05 06 07 08 09 10 11 12 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64 65"
+LAST_OFFSET=65
 
 BACKUP_DIR=""
 HAD_DEC=0
@@ -363,7 +363,7 @@ write_rules() {
   Synology DSM 7.x rules
   https://github.com/FarmhouseNetworking/Wazuh-Synology
 
-  IDs 127500-127564 by default (the installer renumbers with RULE_BASE).
+  IDs 127500-127565 by default (the installer renumbers with RULE_BASE).
   action and dstuser are static Wazuh fields and cannot be matched with a
   field element, which is why the decoders emit syno_action and the rules
   match on the log text.
@@ -623,6 +623,19 @@ write_rules() {
     <description>Active Backup: task $(syno_task) did not complete - $(syno_event)</description>
     <group>backup,backup_failure,</group>
   </rule>
+  <!-- 127565 is a child of 127559 on purpose. Wazuh tries a parent's children from the
+       highest level down, so a level 4 sibling of 127559 would never be reached: 127559
+       (level 10) matches the same line first. As a child it lowers the alert only for
+       Active Backup's "CBT failed, so a full backup will be performed" fallback, and only
+       when that sentence is the whole message. The backup then goes on and succeeds
+       (127558/127557). Any other failure line, including one that merely mentions CBT,
+       stays at 127559. -->
+  <rule id="127565" level="4">
+    <if_sid>127559</if_sid>
+    <match type="pcre2">Failed to retrieve the changed blocks \(CBT\) for virtual machine [^\r\n]+?\. A full backup will be performed\.\s*$</match>
+    <description>Active Backup: task $(syno_task) could not read changed blocks (CBT), full backup will be performed - $(syno_event)</description>
+    <group>backup,</group>
+  </rule>
   <rule id="127556" level="3">
     <if_sid>127555</if_sid>
     <match type="pcre2">The backup task .* has started</match>
@@ -720,6 +733,7 @@ self_test_samples() {
 56|Oct 14 10:58:43 NAS01 ActiveBackup[9899]: [VM Backup] The backup task VM Backup has started.
 58|Oct 14 11:04:18 NAS01 ActiveBackup[9899]: [VM Backup] The VM VM01 was successfully backed up.
 59|Oct 14 11:26:28 NAS01 ActiveBackup[9899]: [VM Backup] The backup task VM Backup was canceled.
+65|Nov  2 19:02:57 NAS01 ActiveBackup[21490]: [VM Backup] Failed to retrieve the changed blocks (CBT) for virtual machine VM01. A full backup will be performed.
 61|Oct 14 11:08:29 NAS01 Hyper_Backup: jdoe:	[Local][Local Storage 1] Backup task started.
 62|Oct 12 03:05:20 NAS01 Hyper_Backup: SYSTEM:	[Local][Local Storage 2] Backup task finished successfully. [754487 files scanned] [191 new files] [115 files modified] [754181 files unchanged]
 63|Oct 14 03:00:03 NAS01 Hyper_Backup: SYSTEM:	[Local][Local Storage 1] Failed to start backup task. (The backup destination does not exist.) [Path: usbshare1]

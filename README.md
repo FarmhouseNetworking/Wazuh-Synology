@@ -17,6 +17,7 @@ Wazuh does not ship Synology decoders, so without this the NAS's syslog arrives 
 | `rules/9999_synology_rules.xml` | Reference copy of the rules, with the default IDs |
 | `tests/sample-logs.txt` | Real DSM log lines (names and addresses replaced) and the rule each one must hit |
 | `tests/run-tests.sh` | Test suite that runs both editions of the installer against a fake Wazuh tree |
+| `tests/both-drives-fail.txt`, `tests/stale-check.py` | Hyper Backup log lines for a normal day and a day when both USB drives are missing, and a model of the weekly report's "no success in 26 hours" check, used by the test suite |
 | `tools/build-superops.py` | Generates the SuperOps edition from the command-line script, so the two cannot drift apart |
 | `docs/TROUBLESHOOTING.md` | Every problem hit while building this, with cause and fix |
 
@@ -65,7 +66,7 @@ Replace `192.0.2.10` with your NAS's address. For more than one NAS, separate th
 | `--nas-ip LIST` | (required) | NAS address or addresses, IPv4 or IPv4/CIDR, comma-separated |
 | `--port N` | `514` | Port the manager listens on |
 | `--protocol P` | `tcp` | `tcp` or `udp`. Must match the NAS's **Transfer protocol** |
-| `--rule-base N` | `127500` | First rule ID. The ruleset uses `N` to `N+64` |
+| `--rule-base N` | `127500` | First rule ID. The ruleset uses `N` to `N+65` |
 | `--watch-users LIST` | | Accounts whose every successful sign-in raises a level 10 alert, comma-separated. Use it for break-glass or emergency accounts |
 | `--no-listener` | | Do not add a `<remote>` block. Use when the NAS is already allowed in an existing syslog listener |
 | `--no-firewall` | | Leave ufw / firewalld alone |
@@ -257,7 +258,8 @@ Level 3 is Wazuh's default alert threshold, so every sign-in, file event and Sys
 | 127556 | 3 | Active Backup task started | Wire |
 | 127557 | 3 | Active Backup task completed | Wire |
 | 127558 | 3 | A VM backed up successfully | Wire |
-| 127559 | 10 | Active Backup task or VM cancelled, failed or partially completed | Wire (cancel); failure wording not yet seen |
+| 127559 | 10 | Active Backup task or VM cancelled, failed or partially completed (not the CBT fallback below) | Wire (cancel); failure wording not yet seen |
+| 127565 | 4 | Active Backup could not read the changed blocks (CBT) for a VM and will do a full backup instead. The backup carries on and normally succeeds (127558, 127557). A child of 127559 | Wire |
 | 127560 | 3 | Any Hyper Backup line not matched below (integrity checks, version rotation, task settings) | Export |
 | 127561 | 3 | Hyper Backup task started or resumed | Wire |
 | 127562 | 3 | Hyper Backup task finished successfully | Export |
@@ -265,6 +267,10 @@ Level 3 is Wazuh's default alert threshold, so every sign-in, file event and Sys
 | 127564 | 10 | Hyper Backup task failed for any other reason, was cancelled or suspended, or was skipped | Wire and export |
 
 127563 is kept at level 5 on purpose. With two Hyper Backup tasks rotating between two USB drives, the task whose drive is away fails every night with "destination does not exist". That is expected. The failure that matters is no task succeeding at all, and Wazuh rules cannot alert on something not happening: check for it in a scheduled report (no 127562 in the last 26 hours) instead.
+
+**Why 127565 is a child of 127559.** "Failed to retrieve the changed blocks (CBT) for virtual machine X. A full backup will be performed." contains the word "Failed", so 127559 (level 10) matched it, although the backup then succeeded. Wazuh tries a parent's children from the highest level down, so a level 4 sibling of 127559 would never be reached: 127559 would match the line first. 127565 is therefore a child of 127559, and it matches only when that sentence is the whole message. A cancelled or failed task, or a line that mentions CBT and then reports a real failure, still ends at 127559 (level 10). `tests/run-tests.sh` covers each of these, and shows that a level 4 sibling loses to 127559.
+
+**Detecting a missed backup.** Hyper Backup failures cannot tell you that a backup was missed. With two tasks rotating between two USB drives, the task whose drive is away fails every night (127563, kept at level 5 on purpose), and if both drives are missing on the same day the failure lines look exactly like a normal day, only twice. The signal is the missing success: **no 127562 in the last 26 hours** (no 127557 for Active Backup). Wazuh rules cannot alert on something not happening, so check it in a scheduled report or dashboard, for example `rule.id:127562` in the last 26 hours returning zero hits. `tests/both-drives-fail.txt` and `tests/stale-check.py` show that this check still goes STALE when both drives fail, however many failure alerts arrive, and clears as soon as either drive succeeds.
 
 Fields: Active Backup gives `syno_task`, `syno_event` and `syno_vm`; Hyper Backup gives `srcuser`, `syno_task` and `syno_event`. All backup rules are in the `backup` group, with `backup_success` and `backup_failure` added where they apply.
 

@@ -76,6 +76,17 @@
 127557|Oct 14 11:09:24 NAS01 ActiveBackup[9899]: [VM Backup] The backup task VM Backup was completed.
 127559|Oct 14 11:26:25 NAS01 ActiveBackup[9899]: [VM Backup] The backup task of the VM VM01 was canceled.
 127559|Oct 14 11:26:28 NAS01 ActiveBackup[9899]: [VM Backup] The backup task VM Backup was canceled.
+# Active Backup: CBT fallback. Captured on the wire (rdgi-pen, 2026-11-02, redacted export 2026-11-04) with names replaced. The backup then
+# carries on with a full backup and succeeds, so this is level 4 (127565), not a failure. The two lines after it also mention CBT but are not failures.
+127565|Nov  2 19:02:57 NAS01 ActiveBackup[21490]: [VM Backup] Failed to retrieve the changed blocks (CBT) for virtual machine VM01. A full backup will be performed.
+127555|Nov  2 19:02:57 NAS01 ActiveBackup[21490]: [VM Backup] Cannot retrieve the changed blocks for device VM01 in task VM Backup. (CBT)
+127555|Nov  3 03:05:10 NAS01 ActiveBackup[21490]: [Physical Server] Starting to read and upload the volume content of SystemVolume1. [CBT]
+# Active Backup: real failures that must stay level 10 (127559). The 'failed' and 'partially completed' wordings are CONSTRUCTED to follow the
+# wording of the captured cancel lines; DSM's own failure text has not been captured yet. The last line is a CBT sentence with a real failure
+# after it: not the bare fallback message, so it stays at 127559.
+127559|Nov  2 19:30:00 NAS01 ActiveBackup[21490]: [VM Backup] The backup task of the VM VM01 failed.
+127559|Nov  2 19:30:01 NAS01 ActiveBackup[21490]: [VM Backup] The backup task VM Backup partially completed.
+127559|Nov  2 19:30:02 NAS01 ActiveBackup[21490]: [VM Backup] Failed to retrieve the changed blocks (CBT) for virtual machine VM01. The backup task failed.
 #
 # Hyper Backup: captured on the wire
 127561|Oct 14 11:08:29 NAS01 Hyper_Backup: jdoe:	[Local][Local Storage 1] Backup task started.
