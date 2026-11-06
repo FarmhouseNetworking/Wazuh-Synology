@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.3.1 - 2026-11-05
+
+- **Fixed:** Active Backup for Business's CBT fallback message ("Failed to retrieve the changed blocks (CBT) for virtual machine X. A full backup will be performed.") raised rule 127559 at level 10 although the backup then went on to succeed (127558, 127557). It is now rule 127565 at level 4, group `backup`.
+- 127565 is a child of 127559, not a sibling: Wazuh tries a parent's children from the highest level down, so a lower-level sibling of 127559 can never match first. It matches only when the fallback sentence is the whole message. 127559 itself is unchanged, so cancelled, failed and partially completed tasks, and lines that mention CBT and then report a real failure, still alert at level 10.
+- README: documents that a missed Hyper Backup is detected by the absence of rule 127562 in 26 hours (127557 for Active Backup), not by the failure alerts. This also covers both USB drives being missing on the same day. New tests `tests/both-drives-fail.txt` and `tests/stale-check.py` prove it.
+- Tests: 164 checks (was 131). `tests/sample-logs.txt` holds 84 lines (was 78); the logtest self-test covers 24 (was 23). Checks for the level of each backup alert, for renumbering of the new rule, and a guard test showing why 127565 cannot be a lower-level sibling.
+- The SuperOps edition is regenerated from the command-line script (`tools/build-superops.py`, no change to the builder).
+- The rule range is now 127500-127565 (`--rule-base` uses `N` to `N+65`).
+
 ## 1.3.0 - 2026-10-14
 
 - **Backup job logging.** New decoders for Active Backup for Business (`ActiveBackup[pid]:`) and Hyper Backup (`Hyper_Backup:`) lines, which carry a Wazuh program name and so were not picked up by the System decoder. Rules 127555-127564 cover task start, completion, per-VM success, cancellation and failure. All are in the `backup` group, with `backup_success` / `backup_failure` where they apply.

@@ -1,0 +1,15 @@
+# Hyper Backup, two tasks ("Local Storage 1" and "Local Storage 2") rotating between two USB drives. Used by tests/run-tests.sh with tests/stale-check.py.
+# Wording is from the Hyper Backup log export and the redacted Wazuh export of 2026-11-04 (RDGI-NAS), with names replaced. System lines have a TAB after the colon.
+#
+# 2026-11-02, a normal day: the drive for Local Storage 2 is attached. Local Storage 1 fails with "destination does not exist" (expected, 127563),
+# Local Storage 2 succeeds (127562).
+Nov  2 03:00:02 NAS01 Hyper_Backup: SYSTEM:	[Local][Local Storage 1] Failed to start backup task. (The backup destination does not exist.) [Path: usbshare1]
+Nov  2 03:00:02 NAS01 Hyper_Backup: SYSTEM:	[Local][Local Storage 1] Failed to run backup task.
+Nov  2 03:05:20 NAS01 Hyper_Backup: SYSTEM:	[Local][Local Storage 2] Backup task finished successfully. [754487 files scanned] [191 new files] [115 files modified] [754181 files unchanged]
+#
+# 2026-11-03, both drives unavailable (neither attached, or the wrong drive for each task): both tasks fail with 127563 and there is no 127562.
+# This is the day that matters, and the failure lines alone look the same as a normal day. The signal is the missing success.
+Nov  3 03:00:02 NAS01 Hyper_Backup: SYSTEM:	[Local][Local Storage 1] Failed to start backup task. (The backup destination does not exist.) [Path: usbshare1]
+Nov  3 03:00:02 NAS01 Hyper_Backup: SYSTEM:	[Local][Local Storage 1] Failed to run backup task.
+Nov  3 03:00:02 NAS01 Hyper_Backup: SYSTEM:	[Local][Local Storage 2] Failed to start backup task. (The backup destination does not exist.) [Path: usbshare1]
+Nov  3 03:00:02 NAS01 Hyper_Backup: SYSTEM:	[Local][Local Storage 2] Failed to run backup task.
